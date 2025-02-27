@@ -4,6 +4,11 @@ import zipfile
 from pathlib import Path
 import logging
 import pandas
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.colors as colors
+
+from dash import Dash, dcc, html, Input, Output
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -11,7 +16,7 @@ logging.basicConfig(
 )
 
 
-def main():
+def loadDataframe():
     # the following dataset contains countries that took the survey across 2002 to 2023
     # i just manually picked the countries on the dataset builder page
     # i've also just selected the 'politics' variables (we can change this if needed)
@@ -42,9 +47,181 @@ def main():
             for i in range(len(html_files)):
                 os.remove(f"datasets/{html_files[0]}")
 
-    dataset_df = pandas.read_csv(dataset)
-    logger.info("ESS Dataset loaded")
+    return pandas.read_csv(dataset)
 
+def create_comparison_figure(df, trust_metric):
+    # Calculate average trust for all countries
+    df_filtered = df[(df[trust_metric] >= 0) & (df[trust_metric] <= 10)].copy()
+    df_filtered['trust_score'] = df_filtered[trust_metric].astype(float)
+    average_trust = df_filtered.groupby(['essround', 'cntry'])['trust_score'].mean().reset_index()
 
-if __name__ == "__main__":
-    main()
+    # Create figure for country comparison
+    fig = go.Figure()
+
+    # Use Viridis color scale
+    num_countries = len(df['cntry'].unique())
+    viridis_colors = colors.sequential.Viridis
+    country_colors = [viridis_colors[i % len(viridis_colors)] for i in range(num_countries)]
+
+    # Add a line for each country
+    for i, country in enumerate(df['cntry'].unique()):
+        country_data = average_trust[average_trust['cntry'] == country]
+        country_name = country_name_map.get(country, country)
+        fig.add_trace(go.Scatter(
+            x=country_data['essround'],
+            y=country_data['trust_score'],
+            mode='lines+markers',
+            name=country_name,
+            hovertemplate=f"{country_name}, Round: %{{x}}, Trust: %{{y:.2f}}<extra></extra>",
+            marker=dict(color=country_colors[i])  # Assign color to the line
+        ))
+
+    fig.update_layout(
+        title=f"Average Trust in {trust_metric} Across All Countries",
+        title_x=0.5,
+        xaxis_title="ESS Round",
+        yaxis_title="Average Trust Score",
+        yaxis_range=[0, 10],
+        xaxis=dict(tickmode='linear'),
+        height=500,
+        hovermode='x unified'
+    )
+    return fig
+
+def create_detail_figure(df, selected_country, trust_metric):
+    df_country = df[df['cntry'] == selected_country].copy()
+    df_country = df_country[(df_country[trust_metric] >= 0) & (df_country[trust_metric] <= 10)]
+
+    grouped = df_country.groupby(['essround', trust_metric]).size().unstack(fill_value=0)
+    grouped_norm = grouped.apply(lambda x: x/x.sum(), axis=1)
+
+    viridis_colors = colors.sequential.Viridis
+
+    count_traces = []
+    num_columns_grouped = len(grouped.columns)
+    bar_colors_counts = [viridis_colors[i % len(viridis_colors)] for i in range(num_columns_grouped)]
+    for i, column in enumerate(grouped.columns):
+        trust_label = str(column)
+        if column == 0:
+            trust_label = "0 - No trust at all"
+        elif column == 10:
+            trust_label = "10 - Complete trust"
+        count_traces.append(go.Bar(x=grouped.index, y=grouped[column], name=trust_label, marker_color=bar_colors_counts[i], legendgroup="group1"))
+
+    proportion_traces = []
+    num_columns_grouped_norm = len(grouped_norm.columns)
+    bar_colors_props = [viridis_colors[i % len(viridis_colors)] for i in range(num_columns_grouped_norm)]
+    for i, column in enumerate(grouped_norm.columns):
+        trust_label = str(column)
+        if column == 0:
+            trust_label = "0 - No trust at all"
+        elif column == 10:
+            trust_label = "10 - Complete trust"
+        proportion_traces.append(go.Bar(x=grouped_norm.index, y=grouped_norm[column], name=trust_label, marker_color=bar_colors_props[i], legendgroup="group1", showlegend=False))
+
+    fig = make_subplots(rows=2, cols=1, subplot_titles=(f"Trust in {trust_metric} (Counts)", f"Normalised Trust in {trust_metric} (Proportions)"), vertical_spacing=0.2)
+
+    for trace in count_traces:
+        fig.add_trace(trace, row=1, col=1)
+    for trace in proportion_traces:
+        fig.add_trace(trace, row=2, col=1)
+
+    fig.update_layout(
+        title_text=f"Detailed Trust Distribution in {country_name_map.get(selected_country, selected_country)} - {trust_metric}",
+        title_x=0.5,
+        height=800,
+        barmode='stack',
+        showlegend=True,
+        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1)
+    )
+    fig.update_yaxes(title_text="Number of Respondents", row=1, col=1)
+    fig.update_yaxes(title_text="Proportion of Respondents", row=2, col=1)
+    fig.update_xaxes(title_text="ESS Round", row=1, col=1, tickmode='linear')
+    fig.update_xaxes(title_text="ESS Round", row=2, col=1, tickmode='linear')
+    return fig
+
+app = Dash(__name__)
+
+df = loadDataframe()
+logger.info("ESS Dataset loaded")
+
+columns_to_drop = ["name", "edition","proddate"]
+df = df.drop(columns=columns_to_drop, errors='ignore')
+countries = df['cntry'].unique()
+
+# Mapping of country codes to full country names
+country_name_map = {
+    'BE': 'Belgium',
+    'FI': 'Finland',
+    'FR': 'France',
+    'DE': 'Germany',
+    'HU': 'Hungary',
+    'IE': 'Ireland',
+    'NL': 'Netherlands',
+    'NO': 'Norway',
+    'PL': 'Poland',
+    'PT': 'Portugal',
+    'SI': 'Slovenia',
+    'ES': 'Spain',
+    'SE': 'Sweden',
+    'CH': 'Switzerland',
+    'GB': 'United Kingdom'
+}
+
+# Use the mapping to create dropdown options
+country_dropdown_options = [{'label': country_name_map.get(country, country), 'value': country} for country in countries]
+
+trust_metrics = {
+    'trstep': 'Trust in the European Parliament',
+    'trstlgl': 'Trust in the legal system',
+    'trstplc': 'Trust in the police',
+    'trstplt': 'Trust in politicians',
+    'trstprl': 'Trust in country\'s parliament',
+    'trstprt': 'Trust in political parties',
+    'trstun': 'Trust in the United Nations',
+    'trstsci': 'Trust in scientists'
+}
+
+trust_metric_options = [{'label': label, 'value': metric} for metric, label in trust_metrics.items()]
+
+app.layout = html.Div([
+    html.H1("Trust in Politicians Across Europe", style={'textAlign': 'center'}),
+
+    # Comparison plot
+    dcc.Graph(id='comparison-plot'),
+
+    # Country selector
+    dcc.Dropdown(
+        id='country-dropdown',
+        options=country_dropdown_options,
+        value=countries[0],
+        clearable=False,
+        style={'width': '50%', 'margin': '20px auto'}
+    ),
+    # Trust Metric selector
+    dcc.Dropdown(
+        id='trust-metric-dropdown',
+        options=trust_metric_options,
+        value='trstplt',  # Default trust metric
+        clearable=False,
+        style={'width': '50%', 'margin': '20px auto'}
+    ),
+
+    # Detailed country plot
+    dcc.Graph(id='detail-plot')
+])
+
+@app.callback(
+    [Output('comparison-plot', 'figure'),
+     Output('detail-plot', 'figure')],
+    [Input('country-dropdown', 'value'),
+     Input('trust-metric-dropdown', 'value')]
+)
+def update_graphs(selected_country, trust_metric):
+    comparison_fig = create_comparison_figure(df, trust_metric)
+    detail_fig = create_detail_figure(df, selected_country, trust_metric)
+    return comparison_fig, detail_fig
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
+
