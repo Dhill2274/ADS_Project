@@ -1,5 +1,4 @@
 .DS_Store
-datasets/*
 .python-version
 pyproject.toml
 uv.lock
