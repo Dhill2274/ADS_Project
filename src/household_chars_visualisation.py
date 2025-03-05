@@ -131,6 +131,43 @@ def create_comparison_figure(df):
     )
     return fig
 
+def create_age_comparison_figure(df):
+    """
+    Creates a line chart showing the average age of respondant of the servey
+    by ESS round for each country in country_name_map.
+    """
+    df_filtered = df[df['agea'].notnull() & (df['agea'] > 0)]
+    df_filtered = df_filtered[df_filtered['cntry'].isin(country_name_map.keys())]
+    avg_household = df_filtered.groupby(['essround', 'cntry'])['agea'].mean().reset_index()
+    
+    fig = go.Figure()
+    unique_countries = sorted(df_filtered['cntry'].unique())
+    num_countries = len(unique_countries)
+    viridis_colors = colors.sequential.Viridis
+    country_colors = [viridis_colors[i % len(viridis_colors)] for i in range(num_countries)]
+    
+    for i, country in enumerate(unique_countries):
+        country_data = avg_household[avg_household['cntry'] == country]
+        country_name = country_name_map.get(country, country)
+        fig.add_trace(go.Scatter(
+            x=country_data['essround'],
+            y=country_data['agea'],
+            mode='lines+markers',
+            name=country_name,
+            hovertemplate=f"{country_name}, ESS Round: %{{x}}, Avg Respondent Age: %{{y:.2f}}<extra></extra>",
+            marker=dict(color=country_colors[i])
+        ))
+    
+    fig.update_layout(
+        title="Average Age of Survey Respondent by ESS Round per Country",
+        xaxis_title="ESS Round",
+        yaxis_title="Average Age of Respondent per Household",
+        xaxis=dict(tickmode='linear'),
+        hovermode='x unified',
+        height=500
+    )
+    return fig
+
 # Initialize the Dash app
 app = Dash(__name__)
 
@@ -141,6 +178,7 @@ df_household = load_household_data()
 initial_distribution_fig = create_household_distribution_figure(df_household, selected_country='all')
 initial_distribution_log_fig = create_household_distribution_log_figure(df_household, selected_country='all')
 comparison_fig = create_comparison_figure(df_household)
+comparison_fig_age = create_age_comparison_figure(df_household)
 
 # Define options for the distribution graph dropdown
 distribution_country_options = (
@@ -152,6 +190,7 @@ distribution_country_options = (
 # 1. Comparison graph (average by ESS round)
 # 2. Distribution graph (linear scale) with dropdown
 # 3. Distribution graph (log scale) with the same dropdown
+# 4. Comparison graph of age (average by ESS round)
 app.layout = html.Div([
     html.H1("Household Characteristics Visualisation", style={'textAlign': 'center'}),
     
@@ -174,6 +213,9 @@ app.layout = html.Div([
     
     # Distribution graph (log scale)
     dcc.Graph(id='distribution-log-graph', figure=initial_distribution_log_fig), 
+
+    # Comparison graph
+    dcc.Graph(id='comparison-age-graph', figure=comparison_fig_age),
 
     # Extra space at the bottom to prevent final graph being blocked
     html.Div(style={'height': '50px'})
