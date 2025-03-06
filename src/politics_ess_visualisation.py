@@ -22,12 +22,13 @@ def loadDataframe():
     # i've also just selected the 'politics' variables (we can change this if needed)
     # url: https://ess.sikt.no/en/data-builder/?tab=round_country&rounds=0.2_9-11_13_15_23-38+1.2_9-11_13_15_23-27_32-5_38+2.2_9-27_32-35_38+3.2_9-11_13_15_23-27_32-35_38+4.2_9-11_13_15_23-27_32-35_38+5.2_9-13_15_23-27_32-35_38+6.2_9-15_23-38+7.2_9-13_15_23-27_32-38+8.2_9-13_15_23-27_32-38+9.2_9_10_13_15_23_25_27_32-38+10.11_26_33_34+11.2_9-11_13_15_23-27_32-38&seriesVersion=883&variables=1
     dataset = Path(
-        "datasets/ESS1e06_7-ESS2e03_6-ESS3e03_7-ESS4e04_6-ESS5e03_5-ESS6e02_6-ESS7e02_3-ESS8e02_3-ESS9e03_2-ESS10-ESS10SC-ESS11-subset.csv"
+        "Datasets/ESS-Politics.csv"
     )
 
     if not dataset.is_file():
         logger.info("Dataset is not downloaded. Downloading now.")
-        dataset_url = "https://stessdissprodwe.blob.core.windows.net/data/download/4/generate_datafile/714852f71208f80d1af68aefdacaab25.zip?st=2025-02-27T12%3A35%3A10Z&se=2025-02-27T13%3A37%3A10Z&sp=r&sv=2023-11-03&sr=b&skoid=1b26ad26-8999-4f74-9562-ad1c57749956&sktid=93a182aa-d7bd-4a74-9fb1-84df14cae517&skt=2025-02-27T12%3A35%3A10Z&ske=2025-02-27T13%3A37%3A10Z&sks=b&skv=2023-11-03&sig=93r9f2LuIpSZnoc59tBB65m9f7ohcKBEXRRBN68gH94%3D"
+        # this url rotates daily, so it may break lol
+        dataset_url = "https://stessdissprodwe.blob.core.windows.net/data/download/4/generate_datafile/714852f71208f80d1af68aefdacaab25.zip?st=2025-03-03T10%3A57%3A48Z&se=2025-03-03T11%3A59%3A48Z&sp=r&sv=2023-11-03&sr=b&skoid=1b26ad26-8999-4f74-9562-ad1c57749956&sktid=93a182aa-d7bd-4a74-9fb1-84df14cae517&skt=2025-03-03T10%3A57%3A48Z&ske=2025-03-03T11%3A59%3A48Z&sks=b&skv=2023-11-03&sig=Mx7zNzrVi26DxNbWhCfVqkQUm9s%2BRqijb8bWTdFOn98%3D"
         dst = "datasets/ess_politics.zip"
         _ = urlretrieve(dataset_url, dst)
 
