@@ -6,9 +6,9 @@ df_house = pd.read_csv("Combined/combined_ess(household).csv", sep='\t')
 df_media = pd.read_csv("Cleaned/Cleaned_Media&Trust.csv", sep=',')
 
 df_house.columns = df_house.columns.str.replace(r"^'|'$", "", regex=True)
+
 # print(df_house.columns.tolist())
 # print(df_media.columns.tolist())
-
 # print([repr(col) for col in df_house.columns])
 # print([repr(col) for col in df_media.columns])
 
