@@ -24,7 +24,7 @@ country_name_map = {
 }
 
 def load_household_data():
-    dataset = Path("Datasets/cleaned_household_characteristics.csv")
+    dataset = Path("Cleaned/cleaned_household_characteristics.csv")
     if not dataset.is_file():
         raise FileNotFoundError("Dataset not found at 'Datasets/cleaned_household_characteristics.csv'")
     return pd.read_csv(dataset)
