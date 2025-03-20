@@ -1,3 +1,4 @@
 datasets filter=lfs diff=lfs merge=lfs -text
 cleaned filter=lfs diff=lfs merge=lfs -text
 *.csv filter=lfs diff=lfs merge=lfs -text
+*.py -filter -diff -merge text
