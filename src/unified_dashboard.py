@@ -700,6 +700,17 @@ correlation_matrix_layout = dbc.Container([
         dbc.CardBody(id='corr-matrix-info')
     ], className="shadow-sm"),
 
+    dbc.Card([
+        dbc.CardHeader("Question Detail View"),
+        dbc.CardBody([
+            dcc.Graph(
+                id='question-detail-graph',
+                style={'height': '500px'},
+                figure=go.Figure(layout={'title': 'Click on a cell in the correlation matrix for details'})
+            )
+        ])
+    ], className="mb-4 shadow-sm"),
+
     html.Footer([
         html.P("Trade-ESS Correlation Analysis Tool", className="text-center text-muted mt-4")
     ])
@@ -718,136 +729,106 @@ def map_round_to_year(round_num):
 @callback(
     Output('correlation-matrix-graph', 'figure'),
     Output('corr-matrix-info', 'children'),
-    [Input('corr-dataset-dropdown', 'value'),
-     Input('corr-trade-type', 'value'),
-     Input('corr-answer-type', 'value')]
+    Output('question-detail-graph', 'figure'),
+    [
+        Input('corr-dataset-dropdown', 'value'),
+        Input('corr-trade-type', 'value'),
+        Input('corr-answer-type', 'value'),
+        Input('correlation-matrix-graph', 'clickData')
+    ]
 )
-def update_correlation_matrix(selected_dataset, trade_type, answer_type):
+def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickData):
+    # Default detail figure (shown if no cell is clicked)
+    detail_fig = go.Figure(layout={'title': 'Click on a cell in the correlation matrix for details'})
+
     if not selected_dataset:
-        # Return empty figure with instructions
-        return go.Figure(layout={
+        placeholder_fig = go.Figure(layout={
             'title': 'Select datasets to view correlation matrix',
             'template': 'plotly_white'
-        }), html.P("Please select a dataset")
+        })
+        return placeholder_fig, html.P("Please select a dataset"), detail_fig
 
     try:
-        # Load the ESS dataset
+        # ---------------------------
+        # 1) Build the Correlation Matrix
+        # ---------------------------
         dataset_obj = Dataset(selected_dataset)
         display_name = DATASET_DISPLAY_NAMES.get(selected_dataset, selected_dataset.capitalize())
 
-        # Load and process trade data
+        # Load & process trade data
         trade_df, _ = load_trade_data()
         years, all_countries, sent_per_country, received_per_country = process_quantity_data(trade_df)
-
-        # Determine which trade data to use based on selection
         trade_data = sent_per_country if trade_type == 'sent' else received_per_country
         trade_action = "Export" if trade_type == 'sent' else "Import"
 
-        # Get the answer data source based on selection
+        # ESS answer data
         answer_data = dataset_obj.questions if answer_type == 'mode' else dataset_obj.questionsMean
         answer_type_text = "Most Common Answers" if answer_type == 'mode' else "Mean Answers"
 
-        # Get ESS countries that have trade data
         ess_country_codes = list(ESS_COUNTRIES.keys())
-
-        # Create a mapping between ESS country codes and full names
         code_to_name = {code: name for code, name in ESS_COUNTRIES.items()}
         name_to_code = {name: code for code, name in ESS_COUNTRIES.items()}
 
-        # Get top questions (limit to 15 for readability)
         questions = dataset_obj.questionLabels[:15]
-
-        # Dictionary to store correlation values indexed by country and question
         country_question_correlations = {}
-
-        # Countries and questions that have sufficient data for correlation
         valid_countries = []
         valid_questions = []
 
-        # Process each country
         for country_code in ess_country_codes:
             if country_code not in dataset_obj.countryLabels:
                 continue
-
             country_name = code_to_name[country_code]
-
-            # Check if this country has trade data
             if country_name not in trade_data:
                 continue
 
-            # Create time series data for this country
+            # Build time series for each round
             country_data = []
             country_has_sufficient_data = False
-
-            # For each ESS round/year
-            for round_num in range(1, 12):  # ESS rounds 1-11
+            for round_num in range(1, 12):
                 year = map_round_to_year(round_num)
                 if year is None or year not in trade_data[country_name]:
                     continue
-
-                # Get trade quantity for this country and year
                 trade_quantity = trade_data[country_name][year]
-
-                # Dictionary to hold question values for this year
-                year_data = {'Year': year, 'Trade_Quantity': trade_quantity}
-
-                # Add ESS question values
+                row = {'Year': year, 'Trade_Quantity': trade_quantity}
                 has_question_data = False
                 for question in questions:
                     if country_code in answer_data[question]:
-                        value = answer_data[question][country_code][round_num - 1]  # Adjust for 0-indexed list
-
                         try:
-                            if value != "None":
-                                # For mode values, we need to handle non-numeric responses
+                            val = answer_data[question][country_code][round_num - 1]
+                            if val != "None":
                                 if answer_type == 'mode':
+                                    # Convert to float if numeric
                                     try:
-                                        value = float(value)
+                                        val = float(val)
                                     except (ValueError, TypeError):
-                                        # Skip non-numeric mode values
                                         continue
                                 else:
-                                    value = float(value)
-
-                                year_data[question] = value
+                                    val = float(val)
+                                row[question] = val
                                 has_question_data = True
-                        except (ValueError, TypeError):
+                        except (IndexError, ValueError, TypeError):
                             pass
-
                 if has_question_data:
-                    country_data.append(year_data)
+                    country_data.append(row)
 
-            # Convert to DataFrame
-            if len(country_data) >= 3:  # Need at least 3 data points for meaningful correlation
+            if len(country_data) >= 3:
                 country_has_sufficient_data = True
                 df = pd.DataFrame(country_data)
-
-                # Calculate correlation between trade quantity and each question
+                # For each question, compute correlation w.r.t. Trade_Quantity
                 for question in questions:
-                    # Use full question name without truncation
                     if question in df.columns:
-                        # Check if we have enough non-NaN values
                         valid_data = df[['Trade_Quantity', question]].dropna()
-
                         if len(valid_data) >= 3:
-                            # Check for constant values (no variation)
+                            # Skip if constant
                             if valid_data['Trade_Quantity'].std() == 0 or valid_data[question].std() == 0:
-                                # Can't calculate correlation when one variable is constant
                                 continue
-
                             try:
-                                # Use numpy's corrcoef which is more robust
                                 corr_matrix = np.corrcoef(valid_data['Trade_Quantity'], valid_data[question])
-                                corr = corr_matrix[0, 1]  # Get the correlation coefficient
-
-                                # Check if correlation is valid (not NaN or infinite)
+                                corr = corr_matrix[0, 1]
                                 if pd.notna(corr) and np.isfinite(corr):
                                     if country_name not in country_question_correlations:
                                         country_question_correlations[country_name] = {}
-
                                     country_question_correlations[country_name][question] = corr
-
-                                    # Track valid questions
                                     if question not in valid_questions:
                                         valid_questions.append(question)
                             except Exception as e:
@@ -857,87 +838,158 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type):
             if country_has_sufficient_data and country_name in country_question_correlations:
                 valid_countries.append(country_name)
 
+        # If no valid data
         if not valid_countries or not valid_questions:
-            # Return empty figure with a message
-            fig = go.Figure()
-            fig.update_layout(
-                title="Insufficient time series data for correlation analysis",
-                template='plotly_white'
-            )
-
+            empty_fig = go.Figure(layout={
+                'title': "Insufficient time series data for correlation analysis",
+                'template': 'plotly_white'
+            })
             info_content = html.Div([
                 html.H4("Insufficient Data"),
                 html.P("Not enough years with both ESS and trade data to calculate meaningful correlations for any country.")
             ])
+            return empty_fig, info_content, detail_fig
 
-            return fig, info_content
-
-        # Create correlation matrix for heatmap - transpose to switch the axes
-        correlation_matrix = []
-
-        # Sort countries and questions for better visualisation
         valid_countries.sort()
         valid_questions.sort()
 
-        # Create z values for heatmap - build by question first (rows) instead of by country
+        # Build correlation matrix
+        correlation_matrix = []
         for question in valid_questions:
-            question_row = []
+            row = []
             for country in valid_countries:
-                if country in country_question_correlations and question in country_question_correlations[country]:
-                    question_row.append(country_question_correlations[country][question])
-                else:
-                    question_row.append(None)  # No correlation data
-            correlation_matrix.append(question_row)
+                row.append(country_question_correlations.get(country, {}).get(question, None))
+            correlation_matrix.append(row)
 
-        # Create the heatmap with switched axes
-        fig = go.Figure(data=go.Heatmap(
+        # Create heatmap
+        heatmap_fig = go.Figure(data=go.Heatmap(
             z=correlation_matrix,
-            y=valid_questions,  # Questions on y-axis
-            x=valid_countries,  # Countries on x-axis
-            colorscale='RdBu_r',  # Red for negative correlations, blue for positive
-            zmid=0,  # Center the color scale at 0
+            y=valid_questions,
+            x=valid_countries,
+            colorscale='RdBu_r',
+            zmid=0,
             zmin=-1,
             zmax=1,
-            colorbar=dict(
-                title=dict(
-                    text="Correlation",
-                    side="right"
-                )
-            ),
+            colorbar=dict(title=dict(text="Correlation", side="right")),
             hovertemplate='Country: %{x}<br>Question: %{y}<br>Correlation: %{z:.3f}<extra></extra>'
         ))
-
-        # Update layout with switched axes
-        fig.update_layout(
+        heatmap_fig.update_layout(
             title=f"Country-Level Correlations: Arms {trade_action} vs {display_name} {answer_type_text}",
             xaxis_title="Countries",
             yaxis_title="ESS Questions",
             height=800,
-            margin=dict(l=300, r=50, t=80, b=80),  # More space for question labels on y-axis
+            margin=dict(l=300, r=50, t=80, b=80),
             template='plotly_white',
-            xaxis=dict(tickangle=-45)  # Angle country labels for better readability
+            xaxis=dict(tickangle=-45)
         )
 
-        # Prepare information panel content
         info_content = html.Div([
             html.H4(f"Country-Level Correlation Analysis: {display_name} ({answer_type_text}) vs. Arms {trade_action}"),
-            html.P(f"This heatmap shows the correlation between the quantity of arms {trade_action.lower()} and {answer_type_text.lower()} to ESS questions for each country over time."),
+            html.P("This heatmap shows the correlation between the quantity of arms "
+                   f"{trade_action.lower()} and {answer_type_text.lower()} to ESS questions for each country over time."),
             html.P("Interpretation:"),
             html.Ul([
                 html.Li("Values closer to +1 or -1 indicate stronger correlations"),
                 html.Li("White or missing cells indicate no correlation or insufficient data")
             ]),
-            html.P(f"Displaying {len(valid_countries)} countries and {len(valid_questions)} questions with sufficient time series data for correlation analysis.")
+            html.P(f"Displaying {len(valid_countries)} countries and {len(valid_questions)} questions with sufficient data.")
         ])
 
-        return fig, info_content
+        # ---------------------------
+        # 2) Build the Detail Graph if a Cell Is Clicked
+        # ---------------------------
+        if clickData is not None:
+            try:
+                clicked_question = clickData['points'][0]['y']
+                clicked_country = clickData['points'][0]['x']
+            except (KeyError, IndexError):
+                detail_fig = go.Figure(layout={'title': 'Unable to parse click data'})
+            else:
+                # Build time-series for the selected country & question
+                country_time_series = []
+                for round_num in range(1, 12):
+                    year = map_round_to_year(round_num)
+                    if year is None or clicked_country not in trade_data or year not in trade_data[clicked_country]:
+                        continue
+                    trade_quantity = trade_data[clicked_country][year]
+
+                    # Map the full country name to code
+                    cc = name_to_code.get(clicked_country)
+                    # Check that we have an answer list for this question
+                    if cc is None or cc not in answer_data[clicked_question]:
+                        continue
+                    ans_list = answer_data[clicked_question][cc]
+                    if len(ans_list) < round_num:
+                        continue
+                    try:
+                        val = float(ans_list[round_num - 1])
+                    except (ValueError, TypeError):
+                        continue
+
+                    country_time_series.append({
+                        'Year': year,
+                        'Trade_Quantity': trade_quantity,
+                        'Question_Value': val
+                    })
+
+                if len(country_time_series) < 3:
+                    detail_fig = go.Figure(layout={'title': f"Not enough data for {clicked_country} - {clicked_question}"})
+                else:
+                    df_detail = pd.DataFrame(country_time_series).sort_values('Year')
+
+                    # Prepare data for regression
+                    X = df_detail['Question_Value'].values.reshape(-1, 1)
+                    y = df_detail['Trade_Quantity'].values
+
+                    # Fit a simple linear regression
+                    from sklearn.linear_model import LinearRegression
+                    linreg = LinearRegression()
+                    linreg.fit(X, y)
+
+                    # Predict y-values for the regression line
+                    y_pred = linreg.predict(X)
+
+                    # Create a scatter plot
+                    detail_fig = go.Figure()
+
+                    # Scatter points: question value on x, trade quantity on y
+                    detail_fig.add_trace(
+                        go.Scatter(
+                            x=df_detail['Question_Value'],
+                            y=df_detail['Trade_Quantity'],
+                            mode='markers',
+                            name='Data Points'
+                        )
+                    )
+
+                    # Regression line
+                    detail_fig.add_trace(
+                        go.Scatter(
+                            x=df_detail['Question_Value'],
+                            y=y_pred,
+                            mode='lines',
+                            name='Best-Fit Line'
+                        )
+                    )
+
+                    # Update layout
+                    detail_fig.update_layout(
+                        title=f"{clicked_country}: {clicked_question} vs. Trade Quantity",
+                        template='plotly_white',
+                        xaxis_title=clicked_question,
+                        yaxis_title='Trade Quantity'
+                    )
+
+        return heatmap_fig, info_content, detail_fig
 
     except Exception as e:
-        # Return error figure
-        return go.Figure(layout={
+        # Return an error figure, info, and a placeholder for detail_fig
+        error_fig = go.Figure(layout={
             'title': f"Error: {str(e)}",
             'template': 'plotly_white'
-        }), html.P(f"Error calculating correlation matrix: {str(e)}")
+        })
+        return error_fig, html.P(f"Error calculating correlation matrix: {str(e)}"), go.Figure(layout={'title': 'No detail available'})
+
 
 # Callback to switch between different visualisations
 @callback(
@@ -969,7 +1021,7 @@ def update_active_link(hash_value):
 
 def main():
     print("Starting Unified Data Visualisation Dashboard...")
-    app.run_server(debug=True)
+    app.run(debug=True)
 
 if __name__ == "__main__":
     main()
