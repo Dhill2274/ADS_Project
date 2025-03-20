@@ -1,3 +1,64 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:993372f6fc901aaeddcdc5f4d066fe8b6fec0a69817630427b1242da5a0b29d2
-size 1102
+/* Custom styles for the ESS Data Visualization app */
+
+/* Improve dropdown appearance */
+.Select-control {
+    border-radius: 4px;
+    border: 1px solid #ced4da;
+}
+
+.Select-control:hover {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Card styling - more subtle hover effect without the blue header */
+.card {
+    border-radius: 8px;
+    transition: box-shadow 0.3s;
+}
+
+.card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* Graph container styling */
+.js-plotly-plot {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Button styling */
+.btn-secondary {
+    background-color: #6c757d;
+    border-color: #6c757d;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+}
+
+/* Better handling of radio items */
+.form-check-inline {
+    margin-right: 1rem;
+}
+
+/* Font style for the tip text */
+.font-italic {
+    font-style: italic;
+}
+
+.small {
+    font-size: 0.875em;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container-fluid {
+        padding: 10px;
+    }
+
+    h1 {
+        font-size: 1.8rem;
+    }
+}
