@@ -879,7 +879,6 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
             return empty_fig, info_content, detail_fig
 
         # Create correlation matrix for heatmap
-        correlation_matrix = []
         data_points_matrix = []
 
         # Sort countries and questions for better visualisation
@@ -922,9 +921,8 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
                             trade_quantity = trade_data[country].get(year, 0)
 
                             if country_code in answer_data[question]:
-                                ess_value = answer_data[question][country_code][round_num - 1]
-
                                 try:
+                                    ess_value = answer_data[question][country_code][round_num - 1]
                                     if ess_value != "None":
                                         if answer_type == 'mode':
                                             try:
@@ -936,7 +934,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
 
                                         # Include with trade_quantity regardless of value (including 0)
                                         year_values.append((year, ess_value, trade_quantity))
-                                except (ValueError, TypeError):
+                                except (IndexError, ValueError, TypeError):
                                     continue
 
                     # Create the hover text with value pairs
@@ -976,7 +974,8 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
             text=hover_text,
             hoverinfo='text'
         ))
-        heatmap_fig.update_layout(
+
+        fig.update_layout(
             title=f"Country-Level Correlations: Arms {trade_action} vs {display_name} {answer_type_text}",
             xaxis_title="Countries",
             yaxis_title="ESS Questions",
@@ -1086,7 +1085,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
                         yaxis_title='Trade Quantity'
                     )
 
-        return heatmap_fig, info_content, detail_fig
+        return fig, info_content, detail_fig
 
     except Exception as e:
         # Return an error figure, info, and a placeholder for detail_fig
