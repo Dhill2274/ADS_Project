@@ -7,6 +7,7 @@ import json
 import sys
 import os
 import numpy as np
+from plotly.subplots import make_subplots
 
 # Add the parent directory to the path so we can import from the other directories
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -70,9 +71,10 @@ navbar = dbc.Navbar(
             dbc.NavbarBrand("Data Visualisation Dashboard", className="ms-2"),
             dbc.Nav(
                 [
-                    dbc.NavItem(dbc.NavLink("ESS Visualisation", href="#ess", id="ess-link")),
                     dbc.NavItem(dbc.NavLink("Trade Quantity", href="#trade-quantity", id="trade-quantity-link")),
+                    dbc.NavItem(dbc.NavLink("ESS Visualisation", href="#ess", id="ess-link")),
                     dbc.NavItem(dbc.NavLink("Correlation Matrix", href="#correlation-matrix", id="correlation-matrix-link")),
+                    dbc.NavItem(dbc.NavLink("Combined View", href="#combined-view", id="combined-view-link")),
                 ],
                 className="ms-auto",
                 navbar=True,
@@ -540,12 +542,11 @@ def update_trade_graph(view_type, country_filter):
     for country in countries_to_display:
         for year in years:
             quantity = data_source[country].get(year, 0)
-            if quantity > 0:  # Only include points with non-zero values
-                plot_data.append({
-                    'Country': country,
-                    'Year': year,
-                    'Quantity': quantity
-                })
+            plot_data.append({
+                'Country': country,
+                'Year': year,
+                'Quantity': quantity
+            })
 
     plot_df = pd.DataFrame(plot_data)
 
@@ -771,6 +772,10 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
 
         questions = dataset_obj.questionLabels[:15]
         country_question_correlations = {}
+        # Dictionary to store data point counts used for correlations
+        correlation_data_points = {}
+
+        # Countries and questions that have sufficient data for correlation
         valid_countries = []
         valid_questions = []
 
@@ -784,12 +789,25 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
             # Build time series for each round
             country_data = []
             country_has_sufficient_data = False
-            for round_num in range(1, 12):
+
+            # Define the full range of years
+            min_year = min(years)
+            max_year = max(years)
+            all_years = range(min_year, max_year + 1)
+
+            # For each ESS round/year
+            for round_num in range(1, 12):  # ESS rounds 1-11
                 year = map_round_to_year(round_num)
-                if year is None or year not in trade_data[country_name]:
+                if year is None or year < min_year or year > max_year:
                     continue
-                trade_quantity = trade_data[country_name][year]
-                row = {'Year': year, 'Trade_Quantity': trade_quantity}
+
+                # Get trade quantity for this country and year - use 0 for missing years
+                trade_quantity = trade_data[country_name].get(year, 0)
+
+                # Dictionary to hold question values for this year
+                year_data = {'Year': year, 'Trade_Quantity': trade_quantity}
+
+                # Add ESS question values
                 has_question_data = False
                 for question in questions:
                     if country_code in answer_data[question]:
@@ -804,12 +822,13 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
                                         continue
                                 else:
                                     val = float(val)
-                                row[question] = val
+                                year_data[question] = val
                                 has_question_data = True
                         except (IndexError, ValueError, TypeError):
                             pass
+
                 if has_question_data:
-                    country_data.append(row)
+                    country_data.append(year_data)
 
             if len(country_data) >= 3:
                 country_has_sufficient_data = True
@@ -820,6 +839,10 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
                         valid_data = df[['Trade_Quantity', question]].dropna()
                         if len(valid_data) >= 3:
                             # Skip if constant
+                            # Store the number of data points used for correlation
+                            data_point_count = len(valid_data)
+
+                            # Check for constant values (no variation)
                             if valid_data['Trade_Quantity'].std() == 0 or valid_data[question].std() == 0:
                                 continue
                             try:
@@ -828,7 +851,12 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
                                 if pd.notna(corr) and np.isfinite(corr):
                                     if country_name not in country_question_correlations:
                                         country_question_correlations[country_name] = {}
+                                        correlation_data_points[country_name] = {}
+
                                     country_question_correlations[country_name][question] = corr
+                                    correlation_data_points[country_name][question] = data_point_count
+
+                                    # Track valid questions
                                     if question not in valid_questions:
                                         valid_questions.append(question)
                             except Exception as e:
@@ -850,19 +878,86 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
             ])
             return empty_fig, info_content, detail_fig
 
+        # Create correlation matrix for heatmap
+        data_points_matrix = []
+
+        # Sort countries and questions for better visualisation
         valid_countries.sort()
         valid_questions.sort()
 
         # Build correlation matrix
         correlation_matrix = []
         for question in valid_questions:
-            row = []
+            question_row = []
+            data_points_row = []
             for country in valid_countries:
-                row.append(country_question_correlations.get(country, {}).get(question, None))
-            correlation_matrix.append(row)
+                if country in country_question_correlations and question in country_question_correlations[country]:
+                    question_row.append(country_question_correlations[country][question])
+                    data_points_row.append(correlation_data_points[country][question])
+                else:
+                    question_row.append(None)  # No correlation data
+                    data_points_row.append(None)
+            correlation_matrix.append(question_row)
+            data_points_matrix.append(data_points_row)
 
-        # Create heatmap
-        heatmap_fig = go.Figure(data=go.Heatmap(
+        # Create custom text for hover information
+        hover_text = []
+        for q_idx, question in enumerate(valid_questions):
+            hover_row = []
+            for c_idx, country in enumerate(valid_countries):
+                corr_value = correlation_matrix[q_idx][c_idx]
+                data_points = data_points_matrix[q_idx][c_idx]
+
+                if corr_value is not None and data_points is not None:
+                    # Get the actual values used for correlation
+                    country_code = name_to_code[country]
+                    year_values = []
+
+                    # Collect paired values for each year
+                    for round_num in range(1, 12):
+                        year = map_round_to_year(round_num)
+                        if year and min_year <= year <= max_year:
+                            # Get trade quantity - use 0 for missing years
+                            trade_quantity = trade_data[country].get(year, 0)
+
+                            if country_code in answer_data[question]:
+                                try:
+                                    ess_value = answer_data[question][country_code][round_num - 1]
+                                    if ess_value != "None":
+                                        if answer_type == 'mode':
+                                            try:
+                                                ess_value = float(ess_value)
+                                            except (ValueError, TypeError):
+                                                continue
+                                        else:
+                                            ess_value = float(ess_value)
+
+                                        # Include with trade_quantity regardless of value (including 0)
+                                        year_values.append((year, ess_value, trade_quantity))
+                                except (IndexError, ValueError, TypeError):
+                                    continue
+
+                    # Create the hover text with value pairs
+                    hover_info = (
+                        f"Country: {country}<br>"
+                        f"Question: {question[:50] + '...' if len(question) > 50 else question}<br>"
+                        f"Correlation: {corr_value:.3f}<br>"
+                        f"Years of data: {len(year_values)}<br>"
+                        f"<br>Year-by-year values:<br>"
+                    )
+
+                    # Add the actual values used for correlation
+                    value_text = ""
+                    for year, ess_val, trade_val in sorted(year_values):
+                        value_text += f"{year}: ESS={ess_val:.2f}, Trade={trade_val:,.0f}<br>"
+
+                    hover_row.append(hover_info + value_text)
+                else:
+                    hover_row.append("No data available")
+            hover_text.append(hover_row)
+
+        # Create the heatmap with switched axes and custom hover text
+        fig = go.Figure(data=go.Heatmap(
             z=correlation_matrix,
             y=valid_questions,
             x=valid_countries,
@@ -870,10 +965,17 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
             zmid=0,
             zmin=-1,
             zmax=1,
-            colorbar=dict(title=dict(text="Correlation", side="right")),
-            hovertemplate='Country: %{x}<br>Question: %{y}<br>Correlation: %{z:.3f}<extra></extra>'
+            colorbar=dict(
+                title=dict(
+                    text="Correlation",
+                    side="right"
+                )
+            ),
+            text=hover_text,
+            hoverinfo='text'
         ))
-        heatmap_fig.update_layout(
+
+        fig.update_layout(
             title=f"Country-Level Correlations: Arms {trade_action} vs {display_name} {answer_type_text}",
             xaxis_title="Countries",
             yaxis_title="ESS Questions",
@@ -887,10 +989,13 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
             html.H4(f"Country-Level Correlation Analysis: {display_name} ({answer_type_text}) vs. Arms {trade_action}"),
             html.P("This heatmap shows the correlation between the quantity of arms "
                    f"{trade_action.lower()} and {answer_type_text.lower()} to ESS questions for each country over time."),
+            html.P(f"This heatmap shows the correlation between the quantity of arms {trade_action.lower()} and {answer_type_text.lower()} to ESS questions for each country over time."),
+            html.P("Gap years with no arms trade are treated as having zero value, rather than missing data."),
             html.P("Interpretation:"),
             html.Ul([
                 html.Li("Values closer to +1 or -1 indicate stronger correlations"),
-                html.Li("White or missing cells indicate no correlation or insufficient data")
+                html.Li("White or missing cells indicate no correlation or insufficient data"),
+                html.Li("Hover over cells to see correlation value and the number of data points used")
             ]),
             html.P(f"Displaying {len(valid_countries)} countries and {len(valid_questions)} questions with sufficient data.")
         ])
@@ -980,7 +1085,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
                         yaxis_title='Trade Quantity'
                     )
 
-        return heatmap_fig, info_content, detail_fig
+        return fig, info_content, detail_fig
 
     except Exception as e:
         # Return an error figure, info, and a placeholder for detail_fig
@@ -988,7 +1093,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
             'title': f"Error: {str(e)}",
             'template': 'plotly_white'
         })
-        return error_fig, html.P(f"Error calculating correlation matrix: {str(e)}"), go.Figure(layout={'title': 'No detail available'})
+        return error_fig, html.P(f"Error calculating correlation matrix: {str(e)}"), detail_fig
 
 
 # Callback to switch between different visualisations
@@ -1001,6 +1106,8 @@ def display_page(hash_value):
         return trade_quantity_layout
     elif hash_value == '#correlation-matrix':
         return correlation_matrix_layout
+    elif hash_value == '#combined-view':
+        return combined_view_layout
     else:  # Default to ESS
         return ess_layout
 
@@ -1008,16 +1115,287 @@ def display_page(hash_value):
 @callback(
     [Output('ess-link', 'active'),
      Output('trade-quantity-link', 'active'),
-     Output('correlation-matrix-link', 'active')],
+     Output('correlation-matrix-link', 'active'),
+     Output('combined-view-link', 'active')],
     [Input('url', 'hash')]
 )
 def update_active_link(hash_value):
     if hash_value == '#trade-quantity':
-        return False, True, False
+        return False, True, False, False
     elif hash_value == '#correlation-matrix':
-        return False, False, True
+        return False, False, True, False
+    elif hash_value == '#combined-view':
+        return False, False, False, True
     else:  # Default to ESS
-        return True, False, False
+        return True, False, False, False
+
+# Add this after the correlation_matrix_layout definition
+combined_view_layout = dbc.Container([
+    dbc.Row([
+        dbc.Col([
+            html.H1("Combined ESS and Trade Data Visualisation",
+                   className="text-center mb-4 mt-3"),
+        ], width=12)
+    ]),
+
+    dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardHeader("Data Selection"),
+                dbc.CardBody([
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label('Select Country:', className="fw-bold"),
+                            dcc.Dropdown(
+                                id='combined-country-dropdown',
+                                options=[{'label': name, 'value': code}
+                                       for code, name in ESS_COUNTRIES.items()],
+                                placeholder="Select a country",
+                                className="mb-3"
+                            ),
+                        ], xs=12, md=6),
+
+                        dbc.Col([
+                            html.Label('Select ESS Dataset:', className="fw-bold"),
+                            dcc.Dropdown(
+                                id='combined-dataset-dropdown',
+                                options=[{'label': DATASET_DISPLAY_NAMES.get(dataset, dataset.capitalize()),
+                                         'value': dataset}
+                                        for dataset in ESS_DATASETS],
+                                placeholder="Select a dataset",
+                                className="mb-3"
+                            ),
+                        ], xs=12, md=6),
+                    ]),
+
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label('Select Question:', className="fw-bold"),
+                            dcc.Dropdown(
+                                id='combined-question-dropdown',
+                                options=[],
+                                placeholder="Select a question",
+                                className="mb-3"
+                            ),
+                        ], xs=12),
+                    ]),
+
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label('Answer Type:', className="fw-bold"),
+                            dbc.RadioItems(
+                                id='combined-answer-type',
+                                options=[
+                                    {'label': 'Mean Answers', 'value': 'mean'},
+                                    {'label': 'Most Common Answers', 'value': 'mode'}
+                                ],
+                                value='mean',
+                                inline=True,
+                                className="mb-3"
+                            ),
+                        ], xs=12, md=6),
+
+                        dbc.Col([
+                            html.Label('Trade Data Type:', className="fw-bold"),
+                            dbc.RadioItems(
+                                id='combined-trade-type',
+                                options=[
+                                    {'label': 'Weapons Exported', 'value': 'sent'},
+                                    {'label': 'Weapons Imported', 'value': 'received'}
+                                ],
+                                value='sent',
+                                inline=True,
+                                className="mb-3"
+                            ),
+                        ], xs=12, md=6),
+                    ]),
+                ])
+            ], className="mb-4 shadow-sm"),
+        ], xs=12)
+    ]),
+
+    dbc.Card([
+        dbc.CardBody([
+            dcc.Loading(
+                id="combined-loading-graph",
+                type="circle",
+                children=[
+                    dcc.Graph(
+                        id='combined-view-graph',
+                        style={'height': '800px'},
+                    )
+                ]
+            )
+        ])
+    ], className="mb-4 shadow-sm"),
+
+    html.Footer([
+        html.P("Combined ESS and Trade Data Visualisation Tool",
+               className="text-center text-muted mt-4")
+    ])
+], fluid=True, className="px-4 py-3")
+
+# Add these callbacks after the existing callbacks
+
+@callback(
+    [Output('combined-question-dropdown', 'options'),
+     Output('combined-question-dropdown', 'value')],
+    [Input('combined-dataset-dropdown', 'value')]
+)
+def update_combined_question_dropdown(selected_dataset):
+    if not selected_dataset:
+        return [], None
+
+    try:
+        dataset_obj = Dataset(selected_dataset)
+        question_options = [{'label': q[:80] + '...' if len(q) > 80 else q,
+                           'value': q}
+                          for q in dataset_obj.questionLabels]
+
+        return question_options, dataset_obj.questionLabels[0] if dataset_obj.questionLabels else None
+    except Exception as e:
+        return [], None
+
+@callback(
+    Output('combined-view-graph', 'figure'),
+    [Input('combined-country-dropdown', 'value'),
+     Input('combined-dataset-dropdown', 'value'),
+     Input('combined-question-dropdown', 'value'),
+     Input('combined-answer-type', 'value'),
+     Input('combined-trade-type', 'value')]
+)
+def update_combined_graph(country_code, selected_dataset, selected_question,
+                        answer_type, trade_type):
+    if not all([country_code, selected_dataset, selected_question]):
+        return go.Figure(layout={
+            'title': 'Select all parameters to view combined data',
+            'template': 'plotly_white'
+        })
+
+    try:
+        # Load ESS data
+        dataset_obj = Dataset(selected_dataset)
+        answer_data = dataset_obj.questions if answer_type == 'mode' else dataset_obj.questionsMean
+
+        # Load trade data
+        trade_df, _ = load_trade_data()
+        years, _, sent_per_country, received_per_country = process_quantity_data(trade_df)
+        trade_data = sent_per_country if trade_type == 'sent' else received_per_country
+
+        country_name = ESS_COUNTRIES[country_code]
+
+        # Create figure with secondary y-axis
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+        # Collect ESS data points
+        ess_data = {}  # Use dictionary to store year-value pairs
+        for round_num in range(1, 12):
+            if country_code in answer_data[selected_question]:
+                value = answer_data[selected_question][country_code][round_num - 1]
+                if value != "None":
+                    try:
+                        value = float(value)
+                        year = map_round_to_year(round_num)
+                        if year:
+                            ess_data[year] = value
+                    except (ValueError, TypeError):
+                        continue
+
+        # Collect trade data points
+        trade_data_points = {}  # Use dictionary to store year-value pairs
+        if country_name in trade_data:
+            # Include all years, even with zero values
+            for year in range(min(years), max(years) + 1):
+                if year in trade_data[country_name]:
+                    quantity = trade_data[country_name][year]
+                    trade_data_points[year] = quantity
+                else:
+                    trade_data_points[year] = 0
+
+        # Find overlapping years
+        ess_years = set(ess_data.keys())
+        trade_years = set(trade_data_points.keys())
+        overlapping_years = sorted(ess_years.intersection(trade_years))
+
+        if not overlapping_years:
+            return go.Figure(layout={
+                'title': f'No overlapping data found for {country_name}',
+                'template': 'plotly_white'
+            })
+
+        # Filter data to only include overlapping years
+        ess_x = []
+        ess_y = []
+        trade_x = []
+        trade_y = []
+
+        for year in overlapping_years:
+            if year in ess_data:
+                ess_x.append(year)
+                ess_y.append(ess_data[year])
+            if year in trade_data_points:
+                trade_x.append(year)
+                trade_y.append(trade_data_points[year])
+
+        # Add ESS data trace
+        fig.add_trace(
+            go.Scatter(
+                x=ess_x,
+                y=ess_y,
+                name="ESS Response",
+                mode='lines+markers',
+                line=dict(color='blue')
+            ),
+            secondary_y=False
+        )
+
+        # Add trade data trace
+        fig.add_trace(
+            go.Scatter(
+                x=trade_x,
+                y=trade_y,
+                name=f"Arms {trade_type.title()}",
+                mode='lines+markers',
+                line=dict(color='red')
+            ),
+            secondary_y=True
+        )
+
+        # Update layout
+        answer_type_text = "Mean Answer" if answer_type == 'mean' else "Most Common Answer"
+        trade_action = "Exports" if trade_type == 'sent' else "Imports"
+
+        # Set x-axis range to overlapping years
+        x_min = min(overlapping_years)
+        x_max = max(overlapping_years)
+
+        fig.update_layout(
+            title=f"{country_name}: ESS {answer_type_text} vs Arms {trade_action} ({x_min}-{x_max})",
+            template='plotly_white',
+            hovermode='x unified',
+            legend=dict(
+                yanchor="top",
+                y=0.99,
+                xanchor="left",
+                x=0.01
+            ),
+            xaxis=dict(
+                range=[x_min - 0.5, x_max + 0.5],  # Add small padding
+                dtick=2  # Show ticks every TWO years instead of every year
+            )
+        )
+
+        fig.update_xaxes(title_text="Year")
+        fig.update_yaxes(title_text="ESS Response", secondary_y=False)
+        fig.update_yaxes(title_text=f"Arms {trade_action} Quantity", secondary_y=True)
+
+        return fig
+
+    except Exception as e:
+        return go.Figure(layout={
+            'title': f"Error: {str(e)}",
+            'template': 'plotly_white'
+        })
 
 def main():
     print("Starting Unified Data Visualisation Dashboard...")
