@@ -5,7 +5,6 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 import sys, os
 
-# Append parent directory for custom module imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.ess.dataset import Dataset
 
@@ -101,12 +100,12 @@ def prepare_unified_dataset():
 if __name__ == "__main__":
     # 1. Prepare unified dataset
     data = prepare_unified_dataset()
-    
+
     # 2. Filter for Ireland and sort by Year
     ireland_df = data[data['Country'] == 'Ireland'].sort_values('Year').reset_index(drop=True)
     print("Ireland Data:")
     print(ireland_df[['Country', 'Year', 'GDP_Expenditure', 'impenv', 'iplylfr']])
-    
+
     # 3. Prepare historical human values DataFrame for Ireland (using country code 'IE')
     years_hist = sorted(ireland_df['Year'].unique())
     human_values = ['impenv', 'iplylfr']
@@ -119,13 +118,13 @@ if __name__ == "__main__":
         ireland_answers = answer_data[val].get('IE', [np.nan]*len(years_hist))
         # Ensure the length is at least the number of historical years
         human_values_hist[val] = pd.to_numeric(ireland_answers[:len(years_hist)], errors='coerce')
-    
+
     # Fill missing values (forward fill as a simple method)
     human_values_hist.fillna(method='ffill', inplace=True)
-    
+
     print("\nHistorical Human Values:")
     print(human_values_hist)
-    
+
     # 4. Forecast future human values using a simple linear regression model
     future_years = np.array([2024, 2026, 2028, 2030]).reshape(-1, 1)
     forecasted_human_values = {}
@@ -134,43 +133,43 @@ if __name__ == "__main__":
         lr_model.fit(human_values_hist[['Year']], human_values_hist[val])
         forecasted_values = lr_model.predict(future_years)
         forecasted_human_values[val] = forecasted_values
-    
+
     forecasted_human_df = pd.DataFrame({
         'Year': future_years.flatten(),
         'impenv': forecasted_human_values['impenv'],
         'iplylfr': forecasted_human_values['iplylfr']
     })
-    
+
     print("\nForecasted Human Values for Future Years:")
     print(forecasted_human_df)
-    
+
     # 5. Fit ARIMAX model on historical GDP with historical human values.
     # We'll use human values as exogenous variables.
     # For this ARIMAX, we'll only use the historical data.
     # (If you want to include the Year as a trend, you could add it as well.)
     endog = ireland_df['GDP_Expenditure']
     exog = human_values_hist[human_values]  # Historical human values
-    
+
     # Check for missing values in exog and fill if necessary
     exog.fillna(exog.mean(), inplace=True)
-    
+
     model = sm.tsa.statespace.SARIMAX(endog, exog=exog, order=(1, 1, 1))
     results = model.fit()
     print("\nARIMAX Model Summary:")
     print(results.summary())
-    
+
     # 6. Forecast future GDP expenditure using the forecasted human values.
     # We need to supply exogenous data for future time periods.
     gdp_forecast = results.get_forecast(steps=len(future_years), exog=forecasted_human_df[human_values])
     forecast_mean = gdp_forecast.predicted_mean
     conf_int = gdp_forecast.conf_int()
-    
+
     forecast_output_df = pd.DataFrame({
         'Year': future_years.flatten(),
         'Forecasted_GDP_Expenditure': forecast_mean.values,
         'Lower_CI': conf_int.iloc[:,0].values,
         'Upper_CI': conf_int.iloc[:,1].values
     })
-    
+
     print("\nForecasted GDP Expenditure using Forecasted Human Values:")
     print(forecast_output_df)
