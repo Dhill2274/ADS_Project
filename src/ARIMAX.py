@@ -103,8 +103,8 @@ if __name__ == "__main__":
     data = prepare_unified_dataset()
     
     # 2. Filter for Ireland and sort by Year
-    ireland_df = data[data['Country'] == 'Ireland'].sort_values('Year').reset_index(drop=True)
-    print("Ireland Data:")
+    ireland_df = data[data['Country'] == 'United Kingdom'].sort_values('Year').reset_index(drop=True)
+    print("UK Data:")
     print(ireland_df[['Country', 'Year', 'GDP_Expenditure', 'impenv', 'iplylfr']])
     
     # 3. Prepare historical human values DataFrame for Ireland (using country code 'IE')
