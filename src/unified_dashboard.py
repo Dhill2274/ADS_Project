@@ -8,6 +8,7 @@ import sys
 import os
 import numpy as np
 from plotly.subplots import make_subplots
+from scipy import stats
 
 # Add the parent directory to the path so we can import from the other directories
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -75,6 +76,7 @@ navbar = dbc.Navbar(
                     dbc.NavItem(dbc.NavLink("ESS Visualisation", href="#ess", id="ess-link")),
                     dbc.NavItem(dbc.NavLink("Correlation Matrix", href="#correlation-matrix", id="correlation-matrix-link")),
                     dbc.NavItem(dbc.NavLink("Combined View", href="#combined-view", id="combined-view-link")),
+                    dbc.NavItem(dbc.NavLink("GDP Expenditure", href="#gdp-expenditure", id="gdp-expenditure-link")),
                 ],
                 className="ms-auto",
                 navbar=True,
@@ -662,7 +664,22 @@ correlation_matrix_layout = dbc.Container([
                                 inline=True,
                                 className="mb-3"
                             ),
-                        ], width=12),
+                        ], width=6),
+
+                        # Add correlation method selector
+                        dbc.Col([
+                            html.Label('Correlation Method:', className="fw-bold"),
+                            dbc.RadioItems(
+                                id='corr-method-type',
+                                options=[
+                                    {'label': 'Pearson (Linear)', 'value': 'pearson'},
+                                    {'label': 'Spearman (Monotonic)', 'value': 'spearman'}
+                                ],
+                                value='pearson', # Default to Pearson
+                                inline=True,
+                                className="mb-3"
+                            ),
+                        ], width=6),
                     ]),
 
                     # Help text
@@ -735,10 +752,11 @@ def map_round_to_year(round_num):
         Input('corr-dataset-dropdown', 'value'),
         Input('corr-trade-type', 'value'),
         Input('corr-answer-type', 'value'),
+        Input('corr-method-type', 'value'),
         Input('correlation-matrix-graph', 'clickData')
     ]
 )
-def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickData):
+def update_correlation_matrix(selected_dataset, trade_type, answer_type, correlation_method, clickData):
     # Default detail figure (shown if no cell is clicked)
     detail_fig = go.Figure(layout={'title': 'Click on a cell in the correlation matrix for details'})
 
@@ -846,8 +864,14 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
                             if valid_data['Trade_Quantity'].std() == 0 or valid_data[question].std() == 0:
                                 continue
                             try:
-                                corr_matrix = np.corrcoef(valid_data['Trade_Quantity'], valid_data[question])
-                                corr = corr_matrix[0, 1]
+                                # Calculate correlation based on selected method
+                                if correlation_method == 'spearman':
+                                    corr, p_value = stats.spearmanr(valid_data['Trade_Quantity'], valid_data[question])
+                                else: # Default to Pearson
+                                    # Use numpy's corrcoef for Pearson
+                                    corr_matrix = np.corrcoef(valid_data['Trade_Quantity'], valid_data[question])
+                                    corr = corr_matrix[0, 1]
+
                                 if pd.notna(corr) and np.isfinite(corr):
                                     if country_name not in country_question_correlations:
                                         country_question_correlations[country_name] = {}
@@ -957,6 +981,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
             hover_text.append(hover_row)
 
         # Create the heatmap with switched axes and custom hover text
+        corr_method_text = "Spearman Rank (Monotonic)" if correlation_method == 'spearman' else "Pearson (Linear)"
         fig = go.Figure(data=go.Heatmap(
             z=correlation_matrix,
             y=valid_questions,
@@ -967,7 +992,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
             zmax=1,
             colorbar=dict(
                 title=dict(
-                    text="Correlation",
+                    text=f"{corr_method_text}<br>Correlation",
                     side="right"
                 )
             ),
@@ -976,7 +1001,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
         ))
 
         fig.update_layout(
-            title=f"Country-Level Correlations: Arms {trade_action} vs {display_name} {answer_type_text}",
+            title=f"Country-Level {corr_method_text} Correlations: Arms {trade_action} vs {display_name} {answer_type_text}",
             xaxis_title="Countries",
             yaxis_title="ESS Questions",
             height=800,
@@ -986,10 +1011,10 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, clickDa
         )
 
         info_content = html.Div([
-            html.H4(f"Country-Level Correlation Analysis: {display_name} ({answer_type_text}) vs. Arms {trade_action}"),
-            html.P("This heatmap shows the correlation between the quantity of arms "
+            html.H4(f"Country-Level {corr_method_text} Correlation Analysis: {display_name} ({answer_type_text}) vs. Arms {trade_action}"),
+            html.P(f"This heatmap shows the {correlation_method} correlation between the quantity of arms "
                    f"{trade_action.lower()} and {answer_type_text.lower()} to ESS questions for each country over time."),
-            html.P(f"This heatmap shows the correlation between the quantity of arms {trade_action.lower()} and {answer_type_text.lower()} to ESS questions for each country over time."),
+            html.P(f"This heatmap shows the {correlation_method} correlation between the quantity of arms {trade_action.lower()} and {answer_type_text.lower()} to ESS questions for each country over time."),
             html.P("Gap years with no arms trade are treated as having zero value, rather than missing data."),
             html.P("Interpretation:"),
             html.Ul([
@@ -1108,6 +1133,8 @@ def display_page(hash_value):
         return correlation_matrix_layout
     elif hash_value == '#combined-view':
         return combined_view_layout
+    elif hash_value == '#gdp-expenditure':
+        return gdp_expenditure_layout
     else:  # Default to ESS
         return ess_layout
 
@@ -1116,18 +1143,17 @@ def display_page(hash_value):
     [Output('ess-link', 'active'),
      Output('trade-quantity-link', 'active'),
      Output('correlation-matrix-link', 'active'),
-     Output('combined-view-link', 'active')],
+     Output('combined-view-link', 'active'),
+     Output('gdp-expenditure-link', 'active')],
     [Input('url', 'hash')]
 )
 def update_active_link(hash_value):
-    if hash_value == '#trade-quantity':
-        return False, True, False, False
-    elif hash_value == '#correlation-matrix':
-        return False, False, True, False
-    elif hash_value == '#combined-view':
-        return False, False, False, True
-    else:  # Default to ESS
-        return True, False, False, False
+    is_ess = hash_value == '#ess' or hash_value == '' or hash_value is None
+    is_trade = hash_value == '#trade-quantity'
+    is_corr = hash_value == '#correlation-matrix'
+    is_combined = hash_value == '#combined-view'
+    is_gdp = hash_value == '#gdp-expenditure'
+    return is_ess, is_trade, is_corr, is_combined, is_gdp
 
 # Add this after the correlation_matrix_layout definition
 combined_view_layout = dbc.Container([
@@ -1396,6 +1422,222 @@ def update_combined_graph(country_code, selected_dataset, selected_question,
             'title': f"Error: {str(e)}",
             'template': 'plotly_white'
         })
+
+#########################
+# GDP EXPENDITURE VISUALISATION
+#########################
+
+# Load and prepare the GDP expenditure data
+def load_gdp_data():
+    print("Loading GDP expenditure data...")
+    path = "datasets/arms/gdp-expenditure.csv"
+    try:
+        df = pd.read_csv(path)
+        df = df.set_index('Country')
+        # Remove percentage signs and convert to numeric, coercing errors to NaN
+        for col in df.columns:
+            df[col] = df[col].astype(str).str.replace('%', '', regex=False)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        # Convert from percentage to actual value (e.g., 1.5 -> 0.015)
+        df = df / 100.0
+        # Reset index to make 'Country' a column again
+        df = df.reset_index()
+        # Melt the DataFrame to long format
+        df_long = df.melt(id_vars=['Country'], var_name='Year', value_name='Expenditure')
+        df_long['Year'] = pd.to_numeric(df_long['Year'], errors='coerce')
+        df_long = df_long.dropna(subset=['Year', 'Expenditure'])
+        df_long['Year'] = df_long['Year'].astype(int)
+
+        print(f"Loaded GDP expenditure data for {df_long['Country'].nunique()} countries.")
+        return df_long
+    except FileNotFoundError:
+        print(f"Error: GDP expenditure file not found at {path}")
+        return pd.DataFrame(columns=['Country', 'Year', 'Expenditure'])
+    except Exception as e:
+        print(f"Error loading or processing GDP expenditure data: {e}")
+        return pd.DataFrame(columns=['Country', 'Year', 'Expenditure'])
+
+
+# GDP expenditure visualisation layout
+gdp_expenditure_layout = dbc.Container([
+    dbc.Row([
+        dbc.Col([
+            html.H1("Military Expenditure as % of GDP Visualisation",
+                   className="text-center mb-4 mt-3"),
+        ], width=12)
+    ]),
+
+    dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardHeader("Data Selection"),
+                dbc.CardBody([
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label('Countries to Display:', className="fw-bold"),
+                            dbc.RadioItems(
+                                id='gdp-country-filter',
+                                options=[
+                                    {'label': 'All Countries', 'value': 'all'},
+                                    {'label': 'ESS Countries Only', 'value': 'ess'}
+                                ],
+                                value='ess',
+                                inline=True,
+                                className="mb-3"
+                            ),
+                        ], xs=12),
+                    ]),
+                    # Help text
+                    dbc.Row([
+                        dbc.Col([
+                            html.P("Tip: Use the range slider below the graph to zoom into specific time periods. Click on country names in the legend to hide or show specific countries.",
+                                  className="text-muted font-italic small")
+                        ])
+                    ])
+                ])
+            ], className="mb-4 shadow-sm"),
+        ], xs=12)
+    ]),
+
+    dbc.Card([
+        dbc.CardBody([
+            dcc.Loading(
+                id="gdp-loading-graph",
+                type="circle",
+                children=[
+                    dcc.Graph(
+                        id='gdp-expenditure-graph',
+                        style={'height': '800px'},
+                        figure=go.Figure(layout={
+                            'title': 'Select parameters to view GDP expenditure data',
+                            'xaxis': {
+                                'title': 'Year',
+                                'rangeslider': {'visible': True},
+                                'dtick': 5, # Adjust tick frequency if needed
+                                'tickmode': 'linear'
+                            },
+                            'yaxis': {'title': 'Military Expenditure (% of GDP)', 'tickformat': '.1%'},
+                            'template': 'plotly_white'
+                        })
+                    )
+                ]
+            )
+        ])
+    ], className="mb-4 shadow-sm"),
+
+    dbc.Card([
+        dbc.CardHeader("GDP Expenditure Information"),
+        dbc.CardBody(id='gdp-info')
+    ], className="shadow-sm"),
+
+    html.Footer([
+        html.P("Military Expenditure Visualisation Tool", className="text-center text-muted mt-4")
+    ])
+], fluid=True, className="px-4 py-3")
+
+# GDP expenditure callbacks
+@callback(
+    [Output('gdp-expenditure-graph', 'figure'),
+     Output('gdp-info', 'children')],
+    [Input('gdp-country-filter', 'value')]
+)
+def update_gdp_graph(country_filter):
+    # Load and process data
+    df_long = load_gdp_data()
+
+    if df_long.empty:
+        fig = go.Figure(layout={'title': 'Error loading GDP data or file not found', 'template': 'plotly_white'})
+        info = html.P("Could not load or process GDP expenditure data.")
+        return fig, info
+
+    # Determine which countries to display based on filter
+    all_available_countries = sorted(df_long['Country'].unique())
+    title_prefix = "Military Expenditure as % of GDP"
+
+    if country_filter == 'ess':
+        # Filter to show only ESS countries that are present in the GDP data
+        countries_to_display = [country for country in all_available_countries if country in ESS_COUNTRY_LIST]
+        title_prefix = f"ESS Countries: {title_prefix}"
+
+        if not countries_to_display:
+            fig = go.Figure()
+            fig.update_layout(
+                title="No ESS countries found in the GDP expenditure data",
+                xaxis_title="Year",
+                yaxis_title="Expenditure (% GDP)",
+                template='plotly_white'
+            )
+            info_content = html.Div([
+                html.H4("No Data Available"),
+                html.P("No ESS countries found in the loaded GDP expenditure data.")
+            ])
+            return fig, info_content
+    else:
+        # Show all countries with data
+        countries_to_display = all_available_countries
+        title_prefix = f"All Countries: {title_prefix} ({len(countries_to_display)})"
+
+    # Filter the DataFrame for the selected countries
+    plot_df = df_long[df_long['Country'].isin(countries_to_display)]
+
+    if plot_df.empty:
+        fig = go.Figure(layout={'title': f'No data for selected countries ({country_filter})', 'template': 'plotly_white'})
+        info = html.P(f"No GDP expenditure data found for the selected country group: {country_filter}.")
+        return fig, info
+
+    # Create the line chart with Plotly Express
+    min_year = plot_df['Year'].min()
+    max_year = plot_df['Year'].max()
+
+    fig = px.line(
+        plot_df,
+        x='Year',
+        y='Expenditure',
+        color='Country',
+        title=f"{title_prefix} ({min_year}-{max_year})",
+        labels={'Expenditure': 'Expenditure (% of GDP)', 'Year': 'Year'},
+        template='plotly_white'
+    )
+
+    # Add markers to the lines
+    fig.update_traces(mode='lines+markers')
+
+    # Add a rangeslider to the x-axis and set default range
+    fig.update_xaxes(
+        rangeslider_visible=True,
+        rangeslider_thickness=0.07,
+        tickangle=0,
+        range=[min_year, max_year],  # Set range based on data
+        dtick=5,  # Show tick marks every 5 years
+        tickmode='linear'
+    )
+
+    # Format y-axis as percentage
+    fig.update_yaxes(tickformat=".1%")
+
+    # Update layout
+    fig.update_layout(
+        hovermode="closest",
+        legend_title="Countries",
+        margin=dict(l=50, r=50, t=80, b=50),
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02
+        )
+    )
+
+    # Prepare information panel content (example)
+    avg_expenditure = plot_df['Expenditure'].mean()
+    info_content = html.Div([
+        html.H4(f"GDP Expenditure Summary ({min_year}-{max_year})"),
+        html.P(f"Displaying data for {len(countries_to_display)} countries."),
+        html.P(f"Average expenditure across displayed countries and years: {avg_expenditure:.2%}")
+    ])
+
+    return fig, info_content
 
 def main():
     print("Starting Unified Data Visualisation Dashboard...")

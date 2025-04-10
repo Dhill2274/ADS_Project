@@ -5,6 +5,7 @@ import sys
 import os
 import math
 from collections import defaultdict
+from scipy import stats
 
 # Add the parent directory (workspace root) to the path
 # Assumes this script is run from the 'src' directory
@@ -91,7 +92,8 @@ def calculate_all_correlations():
     min_year = min(years)
     max_year = max(years)
 
-    all_correlations = []
+    pearson_correlations = [] # List for Pearson results
+    spearman_correlations = [] # List for Spearman results
     processed_count = 0
 
     for dataset_name in ESS_DATASETS:
@@ -181,56 +183,86 @@ def calculate_all_correlations():
 
                             try:
                                 # Calculate Pearson correlation
-                                correlation = df_q['Trade'].corr(df_q['ESS'], method='pearson')
+                                pearson_corr = df_q['Trade'].corr(df_q['ESS'], method='pearson')
 
-                                # Check if correlation is valid
-                                if pd.notna(correlation) and np.isfinite(correlation):
-                                    all_correlations.append({
+                                # Calculate Spearman correlation
+                                spearman_corr, _ = stats.spearmanr(df_q['Trade'], df_q['ESS'])
+
+                                # Check if Pearson correlation is valid and add
+                                if pd.notna(pearson_corr) and np.isfinite(pearson_corr):
+                                    pearson_correlations.append({
                                         'country': country_name,
                                         'question': question,
-                                        'correlation': correlation,
+                                        'correlation': pearson_corr,
+                                        # No need for 'correlation_method' column now
                                         'data_points': len(df_q),
                                         'dataset': dataset_name,
                                         'trade_type': trade_type,
                                         'answer_type': answer_type
                                     })
                                     processed_count += 1
-                                    if processed_count % 1000 == 0:
-                                        print(f"      Processed {processed_count} potential correlations...")
+
+                                # Check if Spearman correlation is valid and add
+                                if pd.notna(spearman_corr) and np.isfinite(spearman_corr):
+                                    spearman_correlations.append({
+                                        'country': country_name,
+                                        'question': question,
+                                        'correlation': spearman_corr,
+                                        # No need for 'correlation_method' column now
+                                        'data_points': len(df_q),
+                                        'dataset': dataset_name,
+                                        'trade_type': trade_type,
+                                        'answer_type': answer_type
+                                    })
+                                    processed_count += 1
+
+                                # Update progress (counts both types)
+                                if processed_count % 2000 == 0:
+                                    print(f"      Processed {processed_count} potential correlations...")
 
                             except Exception as e:
                                 # print(f"      Error calculating correlation for {country_name}, {question}: {e}")
                                 pass # Silently ignore calculation errors for now
 
-    print(f"Finished calculating correlations. Found {len(all_correlations)} valid correlations.")
-    return all_correlations
+    print(f"Finished calculating correlations. Found {len(pearson_correlations)} valid Pearson and {len(spearman_correlations)} valid Spearman correlations.")
+    return pearson_correlations, spearman_correlations # Return both lists
 
-def main(output_filename="all_correlations.csv"):
-    """Main function to calculate correlations and save all results to a CSV."""
+def main(output_prefix="correlations"):
+    """Main function to calculate correlations and save results to separate CSVs."""
     print("Starting correlation analysis...")
-    correlations = calculate_all_correlations()
+    pearson_results, spearman_results = calculate_all_correlations()
 
-    if not correlations:
-        print("No valid correlations found.")
-        return
+    # --- Process and Save Pearson Results ---
+    if not pearson_results:
+        print("No valid Pearson correlations found.")
+    else:
+        df_pearson = pd.DataFrame(pearson_results)
+        df_pearson['abs_correlation'] = df_pearson['correlation'].abs()
+        df_pearson_sorted = df_pearson.sort_values(by='abs_correlation', ascending=False).drop(columns=['abs_correlation'])
 
-    # Convert list of dictionaries to DataFrame
-    df_correlations = pd.DataFrame(correlations)
+        pearson_filename = f"pearson_{output_prefix}.csv"
+        output_path_pearson = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', pearson_filename)
+        try:
+            df_pearson_sorted.to_csv(output_path_pearson, index=False, float_format='%.5f')
+            print(f"Successfully saved {len(df_pearson_sorted)} Pearson correlations to {output_path_pearson}")
+        except Exception as e:
+            print(f"Error saving Pearson correlations to CSV: {e}")
 
-    # Sort by absolute value of correlation, descending
-    df_correlations['abs_correlation'] = df_correlations['correlation'].abs()
-    df_sorted = df_correlations.sort_values(by='abs_correlation', ascending=False).drop(columns=['abs_correlation'])
+    # --- Process and Save Spearman Results ---
+    if not spearman_results:
+        print("No valid Spearman correlations found.")
+    else:
+        df_spearman = pd.DataFrame(spearman_results)
+        df_spearman['abs_correlation'] = df_spearman['correlation'].abs()
+        df_spearman_sorted = df_spearman.sort_values(by='abs_correlation', ascending=False).drop(columns=['abs_correlation'])
 
-    # Define the output path (relative to the script's location in src)
-    # Go up one level from src to the project root
-    output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', output_filename)
-
-    try:
-        # Save the DataFrame to CSV
-        df_sorted.to_csv(output_path, index=False, float_format='%.5f')
-        print(f"Successfully saved {len(df_sorted)} correlations to {output_path}")
-    except Exception as e:
-        print(f"Error saving correlations to CSV: {e}")
+        spearman_filename = f"spearman_{output_prefix}.csv"
+        output_path_spearman = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', spearman_filename)
+        try:
+            df_spearman_sorted.to_csv(output_path_spearman, index=False, float_format='%.5f')
+            print(f"Successfully saved {len(df_spearman_sorted)} Spearman correlations to {output_path_spearman}")
+        except Exception as e:
+            print(f"Error saving Spearman correlations to CSV: {e}")
 
 if __name__ == "__main__":
-    main()
+    main() # Uses default prefix "correlations"
