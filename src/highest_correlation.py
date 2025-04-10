@@ -6,6 +6,7 @@ import os
 import math
 from collections import defaultdict
 from scipy import stats
+import dcor # <-- Add dcor import
 
 # Add the parent directory (workspace root) to the path
 # Assumes this script is run from the 'src' directory
@@ -94,6 +95,7 @@ def calculate_all_correlations():
 
     pearson_correlations = [] # List for Pearson results
     spearman_correlations = [] # List for Spearman results
+    dcor_correlations = [] # List for Distance Correlation results
     processed_count = 0
 
     for dataset_name in ESS_DATASETS:
@@ -188,6 +190,12 @@ def calculate_all_correlations():
                                 # Calculate Spearman correlation
                                 spearman_corr, _ = stats.spearmanr(df_q['Trade'], df_q['ESS'])
 
+                                # Calculate Distance correlation
+                                # Ensure numpy arrays for dcor
+                                x_np = df_q['Trade'].to_numpy()
+                                y_np = df_q['ESS'].to_numpy()
+                                dist_corr = dcor.distance_correlation(x_np, y_np)
+
                                 # Check if Pearson correlation is valid and add
                                 if pd.notna(pearson_corr) and np.isfinite(pearson_corr):
                                     pearson_correlations.append({
@@ -216,21 +224,36 @@ def calculate_all_correlations():
                                     })
                                     processed_count += 1
 
-                                # Update progress (counts both types)
-                                if processed_count % 2000 == 0:
+                                # Check if Distance correlation is valid and add
+                                if pd.notna(dist_corr) and np.isfinite(dist_corr):
+                                    dcor_correlations.append({
+                                        'country': country_name,
+                                        'question': question,
+                                        'correlation': dist_corr,
+                                        # Method is implicit in the filename
+                                        'data_points': len(df_q),
+                                        'dataset': dataset_name,
+                                        'trade_type': trade_type,
+                                        'answer_type': answer_type
+                                    })
+                                    processed_count += 1 # Counts all types
+
+                                # Update progress (counts all types)
+                                if processed_count % 3000 == 0: # Adjusted frequency
                                     print(f"      Processed {processed_count} potential correlations...")
 
                             except Exception as e:
                                 # print(f"      Error calculating correlation for {country_name}, {question}: {e}")
                                 pass # Silently ignore calculation errors for now
 
-    print(f"Finished calculating correlations. Found {len(pearson_correlations)} valid Pearson and {len(spearman_correlations)} valid Spearman correlations.")
-    return pearson_correlations, spearman_correlations # Return both lists
+    print(f"Finished calculating correlations. Found {len(pearson_correlations)} valid Pearson, "
+          f"{len(spearman_correlations)} valid Spearman, and {len(dcor_correlations)} valid Distance correlations.")
+    return pearson_correlations, spearman_correlations, dcor_correlations # Return all three lists
 
 def main(output_prefix="correlations"):
     """Main function to calculate correlations and save results to separate CSVs."""
     print("Starting correlation analysis...")
-    pearson_results, spearman_results = calculate_all_correlations()
+    pearson_results, spearman_results, dcor_results = calculate_all_correlations()
 
     # --- Process and Save Pearson Results ---
     if not pearson_results:
@@ -263,6 +286,22 @@ def main(output_prefix="correlations"):
             print(f"Successfully saved {len(df_spearman_sorted)} Spearman correlations to {output_path_spearman}")
         except Exception as e:
             print(f"Error saving Spearman correlations to CSV: {e}")
+
+    # --- Process and Save Distance Correlation Results ---
+    if not dcor_results:
+        print("No valid Distance correlations found.")
+    else:
+        df_dcor = pd.DataFrame(dcor_results)
+        # dCor is always [0, 1], sort directly descending
+        df_dcor_sorted = df_dcor.sort_values(by='correlation', ascending=False)
+
+        dcor_filename = f"dcor_{output_prefix}.csv"
+        output_path_dcor = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', dcor_filename)
+        try:
+            df_dcor_sorted.to_csv(output_path_dcor, index=False, float_format='%.5f')
+            print(f"Successfully saved {len(df_dcor_sorted)} Distance correlations to {output_path_dcor}")
+        except Exception as e:
+            print(f"Error saving Distance correlations to CSV: {e}")
 
 if __name__ == "__main__":
     main() # Uses default prefix "correlations"

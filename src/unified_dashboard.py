@@ -9,6 +9,7 @@ import os
 import numpy as np
 from plotly.subplots import make_subplots
 from scipy import stats
+import dcor
 
 # Add the parent directory to the path so we can import from the other directories
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -673,7 +674,8 @@ correlation_matrix_layout = dbc.Container([
                                 id='corr-method-type',
                                 options=[
                                     {'label': 'Pearson (Linear)', 'value': 'pearson'},
-                                    {'label': 'Spearman (Monotonic)', 'value': 'spearman'}
+                                    {'label': 'Spearman (Monotonic)', 'value': 'spearman'},
+                                    {'label': 'Distance (Dependence)', 'value': 'dcor'}
                                 ],
                                 value='pearson', # Default to Pearson
                                 inline=True,
@@ -867,10 +869,15 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
                                 # Calculate correlation based on selected method
                                 if correlation_method == 'spearman':
                                     corr, p_value = stats.spearmanr(valid_data['Trade_Quantity'], valid_data[question])
+                                elif correlation_method == 'dcor':
+                                    # Ensure numpy arrays for dcor
+                                    x_np = valid_data['Trade_Quantity'].to_numpy()
+                                    y_np = valid_data[question].to_numpy()
+                                    corr = dcor.distance_correlation(x_np, y_np)
                                 else: # Default to Pearson
                                     # Use numpy's corrcoef for Pearson
-                                    corr_matrix = np.corrcoef(valid_data['Trade_Quantity'], valid_data[question])
-                                    corr = corr_matrix[0, 1]
+                                    corr_matrix_np = np.corrcoef(valid_data['Trade_Quantity'], valid_data[question])
+                                    corr = corr_matrix_np[0, 1]
 
                                 if pd.notna(corr) and np.isfinite(corr):
                                     if country_name not in country_question_correlations:
@@ -981,18 +988,40 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
             hover_text.append(hover_row)
 
         # Create the heatmap with switched axes and custom hover text
-        corr_method_text = "Spearman Rank (Monotonic)" if correlation_method == 'spearman' else "Pearson (Linear)"
+        # Adjust heatmap settings based on correlation method
+        if correlation_method == 'dcor':
+            heatmap_colorscale = 'Viridis' # Sequential scale for [0, 1]
+            heatmap_zmid = None
+            heatmap_zmin = 0
+            heatmap_zmax = 1
+            corr_method_text = "Distance (Dependence)"
+            colorbar_title_text = "Distance Correlation<br>(Dependence Strength)"
+        elif correlation_method == 'spearman':
+            heatmap_colorscale = 'RdBu_r' # Diverging scale for [-1, 1]
+            heatmap_zmid = 0
+            heatmap_zmin = -1
+            heatmap_zmax = 1
+            corr_method_text = "Spearman Rank (Monotonic)"
+            colorbar_title_text = "Spearman Correlation<br>(Monotonic)"
+        else: # Pearson (default)
+            heatmap_colorscale = 'RdBu_r' # Diverging scale for [-1, 1]
+            heatmap_zmid = 0
+            heatmap_zmin = -1
+            heatmap_zmax = 1
+            corr_method_text = "Pearson (Linear)"
+            colorbar_title_text = "Pearson Correlation<br>(Linear)"
+
         fig = go.Figure(data=go.Heatmap(
             z=correlation_matrix,
             y=valid_questions,
             x=valid_countries,
-            colorscale='RdBu_r',
-            zmid=0,
-            zmin=-1,
-            zmax=1,
+            colorscale=heatmap_colorscale, # Use selected colorscale
+            zmid=heatmap_zmid, # Set zmid (None for dcor)
+            zmin=heatmap_zmin, # Use appropriate min
+            zmax=heatmap_zmax, # Use appropriate max
             colorbar=dict(
                 title=dict(
-                    text=f"{corr_method_text}<br>Correlation",
+                    text=colorbar_title_text, # Update colorbar title
                     side="right"
                 )
             ),
@@ -1001,7 +1030,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
         ))
 
         fig.update_layout(
-            title=f"Country-Level {corr_method_text} Correlations: Arms {trade_action} vs {display_name} {answer_type_text}",
+            title=f"Country-Level {corr_method_text} Analysis: Arms {trade_action} vs {display_name} {answer_type_text}", # Update main title
             xaxis_title="Countries",
             yaxis_title="ESS Questions",
             height=800,
@@ -1010,18 +1039,39 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
             xaxis=dict(tickangle=-45)
         )
 
+        # Update info text based on method
+        if correlation_method == 'dcor':
+            interp_text = "Distance Correlation measures the statistical dependence between variables. Values range from 0 (independence) to 1 (strong dependence). It can capture non-linear and non-monotonic relationships but is non-directional."
+            interp_points = [
+                html.Li("Values closer to 1 indicate stronger dependence (any type). Values closer to 0 indicate independence."),
+                html.Li("White or missing cells indicate insufficient data."),
+                html.Li("Hover over cells to see the dependence value and the number of data points used.")
+            ]
+        elif correlation_method == 'spearman':
+             interp_text = "Spearman Rank Correlation measures the strength and direction of a monotonic relationship between variables (how well the relationship can be described using a consistently increasing or decreasing function). Less sensitive to outliers than Pearson."
+             interp_points = [
+                 html.Li("Values closer to +1 or -1 indicate stronger monotonic correlations."),
+                 html.Li("Values near 0 indicate a weak or non-monotonic relationship."),
+                 html.Li("White or missing cells indicate insufficient data."),
+                 html.Li("Hover over cells to see correlation value and the number of data points used.")
+             ]
+        else: # Pearson
+            interp_text = "Pearson Correlation measures the strength and direction of a linear relationship between variables."
+            interp_points = [
+                html.Li("Values closer to +1 or -1 indicate stronger linear correlations."),
+                html.Li("Values near 0 indicate a weak linear relationship."),
+                html.Li("White or missing cells indicate insufficient data."),
+                html.Li("Hover over cells to see correlation value and the number of data points used.")
+            ]
+
         info_content = html.Div([
-            html.H4(f"Country-Level {corr_method_text} Correlation Analysis: {display_name} ({answer_type_text}) vs. Arms {trade_action}"),
-            html.P(f"This heatmap shows the {correlation_method} correlation between the quantity of arms "
+            html.H4(f"Country-Level {corr_method_text} Analysis: {display_name} ({answer_type_text}) vs. Arms {trade_action}"),
+            html.P(f"This heatmap shows the {correlation_method}-based measure between the quantity of arms "
                    f"{trade_action.lower()} and {answer_type_text.lower()} to ESS questions for each country over time."),
-            html.P(f"This heatmap shows the {correlation_method} correlation between the quantity of arms {trade_action.lower()} and {answer_type_text.lower()} to ESS questions for each country over time."),
             html.P("Gap years with no arms trade are treated as having zero value, rather than missing data."),
+            html.P(interp_text),
             html.P("Interpretation:"),
-            html.Ul([
-                html.Li("Values closer to +1 or -1 indicate stronger correlations"),
-                html.Li("White or missing cells indicate no correlation or insufficient data"),
-                html.Li("Hover over cells to see correlation value and the number of data points used")
-            ]),
+            html.Ul(interp_points),
             html.P(f"Displaying {len(valid_countries)} countries and {len(valid_questions)} questions with sufficient data.")
         ])
 
