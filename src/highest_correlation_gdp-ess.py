@@ -37,7 +37,7 @@ def map_round_to_year(round_num):
         6: 2012, 7: 2014, 8: 2016, 9: 2018, 10: 2020, 11: 2022
     }.get(round_num)
 
-def load_gdp_data(path="cleaned/arms/2002-2023_expenditure_gdp_%_europe.xlsx"):
+def load_gdp_data(path="cleaned/arms/2002-2023 expenditure gdp % europe .xlsx"):
     print(f"Loading GDP military expenditure data from {path}...")
     try:
         df = pd.read_csv(path) if path.endswith(".csv") else pd.read_excel(path)

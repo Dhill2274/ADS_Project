@@ -2,9 +2,9 @@ import pandas as pd
 import numpy as np
 
 # Load each correlation file
-df_pearson = pd.read_csv("pearson_correlations.csv")
-df_spearman = pd.read_csv("spearman_correlations.csv")
-df_dcor = pd.read_csv("dcor_correlations.csv")
+df_pearson = pd.read_csv("correlations/gdp/pearson_gdp_correlations_gdp.csv")
+df_spearman = pd.read_csv("correlations/gdp/spearman_gdp_correlations_gdp.csv")
+df_dcor = pd.read_csv("correlations/gdp/dcor_gdp_correlations_gdp.csv")
 
 # Set threshold
 threshold_min = 0.8
@@ -50,7 +50,7 @@ dcor_filtered = dcor_filtered.rename(columns={'correlation': 'dcor_value'})
 matching_rows = dcor_filtered[dcor_filtered['Match_Source'].notna()]
 
 # Save to CSV
-output_path = "matching_dcor_high_corr_with_source.csv"
+output_path = "matching_dcor_high_corr_with_source_gdp.csv"
 matching_rows.to_csv(output_path, index=False)
 print(f"Saved {len(matching_rows)} matching dcor rows to '{output_path}'")
 
