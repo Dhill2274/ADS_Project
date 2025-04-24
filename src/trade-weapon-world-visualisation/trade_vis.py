@@ -247,7 +247,10 @@ def initialize_figure(min_weight, max_weight, unique_weights, max_paths, year_pa
                 size=0,
                 colorscale='sunset',
                 colorbar=dict(
-                    title="Severity (Weight)",
+                    title=dict(
+                        text="Severity (Weight)",
+                        side='right'
+                    ),
                     tickmode="array",
                     tickvals=unique_weights,
                     ticktext=unique_weights,
