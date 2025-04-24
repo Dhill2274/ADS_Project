@@ -2,6 +2,8 @@
 
 ## Dashboard Visualisation
 
+![Dashboard](assets/dashboard.png)
+
 ### ⚡ Quickstart
 This will start the Dash app on [http://127.0.0.1:8050/](http://127.0.0.1:8050/)
 ```
