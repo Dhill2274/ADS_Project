@@ -23,3 +23,18 @@ python src/unified_dashboard.py
 ```
 
 Note: You may need to install [git-lfs](https://github.com/git-lfs/git-lfs).
+
+## Figures
+These are some screenshots of the Plotly figures produced in the Dashboard. To get the full interactive experience, we encourage you to use the Dashboard!
+
+### Correlation Matrix Example
+![Correlation Matrix](/assets/corr-matrix.png)
+
+### Global Arms Exports Example
+![Global Arms Exports](/assets/arms-exports.png)
+
+### Military Expenditure as Percentage of GDP Example
+![Military Expenditure](/assets/exp-gdp.png)
+
+### ESS Example (Topic: Human Values, Question: Important to be rich, have money and expensive things)
+![ESS Values](/assets/ess-values.png)

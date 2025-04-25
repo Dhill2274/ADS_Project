@@ -1731,7 +1731,7 @@ def update_gdp_graph(country_filter):
 
 def main():
     print("Starting Unified Data Visualisation Dashboard...")
-    app.run(debug=True)
+    app.run()
 
 if __name__ == "__main__":
     main()
