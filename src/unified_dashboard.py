@@ -73,11 +73,11 @@ navbar = dbc.Navbar(
             dbc.NavbarBrand("Data Visualisation Dashboard", className="ms-2"),
             dbc.Nav(
                 [
-                    dbc.NavItem(dbc.NavLink("Trade Quantity", href="#trade-quantity", id="trade-quantity-link")),
-                    dbc.NavItem(dbc.NavLink("ESS Visualisation", href="#ess", id="ess-link")),
+                    dbc.NavItem(dbc.NavLink("SIPRI Trades", href="#trade-quantity", id="trade-quantity-link")),
+                    dbc.NavItem(dbc.NavLink("SIPRI GDP", href="#gdp-expenditure", id="gdp-expenditure-link")),
+                    dbc.NavItem(dbc.NavLink("ESS", href="#ess", id="ess-link")),
                     dbc.NavItem(dbc.NavLink("Correlation Matrix", href="#correlation-matrix", id="correlation-matrix-link")),
                     dbc.NavItem(dbc.NavLink("Combined View", href="#combined-view", id="combined-view-link")),
-                    dbc.NavItem(dbc.NavLink("GDP Expenditure", href="#gdp-expenditure", id="gdp-expenditure-link")),
                 ],
                 className="ms-auto",
                 navbar=True,
@@ -155,14 +155,6 @@ ess_layout = dbc.Container([
                             ),
                         ], xs=12),
                     ]),
-
-                    # Help text about legend filtering
-                    dbc.Row([
-                        dbc.Col([
-                            html.P("Tip: Double click on country names in the graph legend to hide or show specific countries.",
-                                  className="text-muted font-italic small")
-                        ])
-                    ])
                 ])
             ], className="mb-4 shadow-sm"),
         ], xs=12)
@@ -422,14 +414,6 @@ trade_quantity_layout = dbc.Container([
                             ),
                         ], xs=12, md=6),
                     ]),
-
-                    # Help text
-                    dbc.Row([
-                        dbc.Col([
-                            html.P("Tip: Use the range slider below the graph to zoom into specific time periods. Click on country names in the legend to hide or show specific countries.",
-                                  className="text-muted font-italic small")
-                        ])
-                    ])
                 ])
             ], className="mb-4 shadow-sm"),
         ], xs=12)
@@ -613,7 +597,7 @@ def update_trade_graph(view_type, country_filter):
 correlation_matrix_layout = dbc.Container([
     dbc.Row([
         dbc.Col([
-            html.H1("Trade-ESS Data Correlation Analysis",
+            html.H1("Trade/GDP-ESS Data Correlation Analysis",
                    className="text-center mb-4 mt-3"),
         ], width=12)
     ]),
@@ -621,8 +605,9 @@ correlation_matrix_layout = dbc.Container([
     dbc.Row([
         dbc.Col([
             dbc.Card([
-                dbc.CardHeader("Dataset Selection"),
+                dbc.CardHeader("Data Selection"),
                 dbc.CardBody([
+                    # Row 1: ESS Dataset
                     dbc.Row([
                         dbc.Col([
                             html.Label('Select ESS Dataset:', className="fw-bold"),
@@ -635,26 +620,47 @@ correlation_matrix_layout = dbc.Container([
                                 clearable=False,
                                 className="mb-3"
                             ),
-                        ], width=6),
+                        ], width=12),
+                    ]),
 
+                    # Row 2: SIPRI Data Type
+                    dbc.Row([
                         dbc.Col([
-                            html.Label('Trade Data Type:', className="fw-bold"),
+                            html.Label('SIPRI Data Type:', className="fw-bold"),
+                            dbc.RadioItems(
+                                id='corr-sipri-data-type',
+                                options=[
+                                    {'label': 'Arms Trade Quantity', 'value': 'trade'},
+                                    {'label': 'Military Expenditure (% GDP)', 'value': 'gdp'}
+                                ],
+                                value='trade', # Default to trade
+                                inline=True,
+                                className="mb-3"
+                            ),
+                        ], width=12),
+                    ]),
+
+                    # Row 3: Trade Type (Conditional)
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label('Trade Type:', className="fw-bold", id='corr-trade-type-label'),
                             dbc.RadioItems(
                                 id='corr-trade-type',
                                 options=[
-                                    {'label': 'Weapons Exported', 'value': 'sent'},
-                                    {'label': 'Weapons Imported', 'value': 'received'}
+                                    {'label': 'Exported', 'value': 'sent'},
+                                    {'label': 'Imported', 'value': 'received'}
                                 ],
                                 value='sent',
                                 inline=True,
                                 className="mb-3"
                             ),
-                        ], width=6),
+                        ], width=12, id='corr-trade-type-col'), # Keep ID for conditional display
                     ]),
 
+                    # Row 4: ESS Answer Type
                     dbc.Row([
                         dbc.Col([
-                            html.Label('Answer Type:', className="fw-bold"),
+                            html.Label('ESS Answer Type:', className="fw-bold"),
                             dbc.RadioItems(
                                 id='corr-answer-type',
                                 options=[
@@ -665,9 +671,11 @@ correlation_matrix_layout = dbc.Container([
                                 inline=True,
                                 className="mb-3"
                             ),
-                        ], width=6),
+                        ], width=12),
+                    ]),
 
-                        # Add correlation method selector
+                    # Row 5: Correlation Method
+                    dbc.Row([
                         dbc.Col([
                             html.Label('Correlation Method:', className="fw-bold"),
                             dbc.RadioItems(
@@ -677,20 +685,12 @@ correlation_matrix_layout = dbc.Container([
                                     {'label': 'Spearman (Monotonic)', 'value': 'spearman'},
                                     {'label': 'Distance (Dependence)', 'value': 'dcor'}
                                 ],
-                                value='pearson', # Default to Pearson
+                                value='pearson',
                                 inline=True,
                                 className="mb-3"
                             ),
-                        ], width=6),
+                        ], width=12),
                     ]),
-
-                    # Help text
-                    dbc.Row([
-                        dbc.Col([
-                            html.P("This visualisation shows correlations between trade quantities and ESS questions.",
-                                  className="text-muted font-italic small")
-                        ])
-                    ])
                 ])
             ], className="mb-4 shadow-sm"),
         ], xs=12)
@@ -732,7 +732,7 @@ correlation_matrix_layout = dbc.Container([
     ], className="mb-4 shadow-sm"),
 
     html.Footer([
-        html.P("Trade-ESS Correlation Analysis Tool", className="text-center text-muted mt-4")
+        html.P("SIPRI-ESS Correlation Analysis Tool", className="text-center text-muted mt-4")
     ])
 ], fluid=True, className="px-4 py-3")
 
@@ -745,6 +745,17 @@ def map_round_to_year(round_num):
     }
     return mapping.get(round_num, None)
 
+# Add callback to hide/show the trade type selector based on SIPRI data type
+@callback(
+    Output('corr-trade-type-col', 'style'),
+    Input('corr-sipri-data-type', 'value')
+)
+def toggle_trade_type_visibility(sipri_data_type):
+    if sipri_data_type == 'trade':
+        return {'display': 'block'} # Show the column
+    else:
+        return {'display': 'none'} # Hide the column
+
 # Correlation matrix callbacks
 @callback(
     Output('correlation-matrix-graph', 'figure'),
@@ -755,10 +766,11 @@ def map_round_to_year(round_num):
         Input('corr-trade-type', 'value'),
         Input('corr-answer-type', 'value'),
         Input('corr-method-type', 'value'),
+        Input('corr-sipri-data-type', 'value'),
         Input('correlation-matrix-graph', 'clickData')
     ]
 )
-def update_correlation_matrix(selected_dataset, trade_type, answer_type, correlation_method, clickData):
+def update_correlation_matrix(selected_dataset, trade_type, answer_type, correlation_method, sipri_data_type, clickData):
     # Default detail figure (shown if no cell is clicked)
     detail_fig = go.Figure(layout={'title': 'Click on a cell in the correlation matrix for details'})
 
@@ -776,11 +788,34 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
         dataset_obj = Dataset(selected_dataset)
         display_name = DATASET_DISPLAY_NAMES.get(selected_dataset, selected_dataset.capitalize())
 
-        # Load & process trade data
-        trade_df, _ = load_trade_data()
-        years, all_countries, sent_per_country, received_per_country = process_quantity_data(trade_df)
-        trade_data = sent_per_country if trade_type == 'sent' else received_per_country
-        trade_action = "Export" if trade_type == 'sent' else "Import"
+        # Load & process selected SIPRI data
+        y_axis_label = "" # For detail graph
+        sipri_data_source_text = "" # For titles/info
+
+        if sipri_data_type == 'trade':
+            trade_df, _ = load_trade_data()
+            years, _, sent_per_country, received_per_country = process_quantity_data(trade_df)
+            sipri_data = sent_per_country if trade_type == 'sent' else received_per_country
+            sipri_action = "Export" if trade_type == 'sent' else "Import"
+            sipri_data_source_text = f"Arms {sipri_action}"
+            y_axis_label = f"Arms {sipri_action} Quantity"
+        elif sipri_data_type == 'gdp':
+            gdp_df = load_gdp_data()
+            if gdp_df.empty:
+                 error_fig = go.Figure(layout={'title': 'Error loading GDP data', 'template': 'plotly_white'})
+                 return error_fig, html.P("Could not load GDP expenditure data."), detail_fig
+            # Reshape GDP data similar to trade data (Country -> Year -> Value)
+            sipri_data = {}
+            years = sorted(gdp_df['Year'].unique())
+            for country in gdp_df['Country'].unique():
+                country_data = gdp_df[gdp_df['Country'] == country]
+                sipri_data[country] = pd.Series(country_data['Expenditure'].values * 100, index=country_data['Year']).to_dict() # Store as percentage points e.g. 1.5 for 1.5%
+            sipri_data_source_text = "Military Expenditure (% GDP)"
+            y_axis_label = "Military Expenditure (% GDP)"
+        else:
+            # Handle unexpected sipri_data_type
+            placeholder_fig = go.Figure(layout={'title': 'Invalid SIPRI data type selected', 'template': 'plotly_white'})
+            return placeholder_fig, html.P("Invalid SIPRI data type."), detail_fig
 
         # ESS answer data
         answer_data = dataset_obj.questions if answer_type == 'mode' else dataset_obj.questionsMean
@@ -803,7 +838,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
             if country_code not in dataset_obj.countryLabels:
                 continue
             country_name = code_to_name[country_code]
-            if country_name not in trade_data:
+            if country_name not in sipri_data:
                 continue
 
             # Build time series for each round
@@ -821,11 +856,12 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
                 if year is None or year < min_year or year > max_year:
                     continue
 
-                # Get trade quantity for this country and year - use 0 for missing years
-                trade_quantity = trade_data[country_name].get(year, 0)
+                # Get SIPRI value for this country and year - use 0 or NaN depending on data type? Use 0 for now.
+                # For GDP, 0 might be valid, for trade it means no trade.
+                sipri_value = sipri_data[country_name].get(year, 0) # Use 0 for missing years in both cases for simplicity
 
                 # Dictionary to hold question values for this year
-                year_data = {'Year': year, 'Trade_Quantity': trade_quantity}
+                year_data = {'Year': year, 'SIPRI_Value': sipri_value}
 
                 # Add ESS question values
                 has_question_data = False
@@ -853,30 +889,30 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
             if len(country_data) >= 3:
                 country_has_sufficient_data = True
                 df = pd.DataFrame(country_data)
-                # For each question, compute correlation w.r.t. Trade_Quantity
+                # For each question, compute correlation w.r.t. SIPRI_Value
                 for question in questions:
                     if question in df.columns:
-                        valid_data = df[['Trade_Quantity', question]].dropna()
+                        valid_data = df[['SIPRI_Value', question]].dropna()
                         if len(valid_data) >= 3:
                             # Skip if constant
                             # Store the number of data points used for correlation
                             data_point_count = len(valid_data)
 
                             # Check for constant values (no variation)
-                            if valid_data['Trade_Quantity'].std() == 0 or valid_data[question].std() == 0:
+                            if valid_data['SIPRI_Value'].std() == 0 or valid_data[question].std() == 0:
                                 continue
                             try:
                                 # Calculate correlation based on selected method
                                 if correlation_method == 'spearman':
-                                    corr, p_value = stats.spearmanr(valid_data['Trade_Quantity'], valid_data[question])
+                                    corr, p_value = stats.spearmanr(valid_data['SIPRI_Value'], valid_data[question])
                                 elif correlation_method == 'dcor':
                                     # Ensure numpy arrays for dcor
-                                    x_np = valid_data['Trade_Quantity'].to_numpy()
+                                    x_np = valid_data['SIPRI_Value'].to_numpy()
                                     y_np = valid_data[question].to_numpy()
                                     corr = dcor.distance_correlation(x_np, y_np)
                                 else: # Default to Pearson
                                     # Use numpy's corrcoef for Pearson
-                                    corr_matrix_np = np.corrcoef(valid_data['Trade_Quantity'], valid_data[question])
+                                    corr_matrix_np = np.corrcoef(valid_data['SIPRI_Value'], valid_data[question])
                                     corr = corr_matrix_np[0, 1]
 
                                 if pd.notna(corr) and np.isfinite(corr):
@@ -905,7 +941,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
             })
             info_content = html.Div([
                 html.H4("Insufficient Data"),
-                html.P("Not enough years with both ESS and trade data to calculate meaningful correlations for any country.")
+                html.P(f"Not enough years with both ESS and {sipri_data_source_text} data to calculate meaningful correlations.")
             ])
             return empty_fig, info_content, detail_fig
 
@@ -948,8 +984,9 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
                     for round_num in range(1, 12):
                         year = map_round_to_year(round_num)
                         if year and min_year <= year <= max_year:
-                            # Get trade quantity - use 0 for missing years
-                            trade_quantity = trade_data[country].get(year, 0)
+                            # Get SIPRI value for this country and year - use 0 or NaN depending on data type? Use 0 for now.
+                            # For GDP, 0 might be valid, for trade it means no trade.
+                            sipri_value = sipri_data[country].get(year, 0) # Use 0 for missing years in both cases for simplicity
 
                             if country_code in answer_data[question]:
                                 try:
@@ -963,12 +1000,20 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
                                         else:
                                             ess_value = float(ess_value)
 
-                                        # Include with trade_quantity regardless of value (including 0)
-                                        year_values.append((year, ess_value, trade_quantity))
+                                        # Include with sipri_value regardless of value (including 0)
+                                        year_values.append((year, ess_value, sipri_value))
                                 except (IndexError, ValueError, TypeError):
                                     continue
 
                     # Create the hover text with value pairs
+                    # Format SIPRI value based on type for hover text
+                    if sipri_data_type == 'trade':
+                        sipri_val_format = "{:,.0f}"
+                        sipri_unit = "Quantity"
+                    else: # gdp
+                        sipri_val_format = "{:.2f}%"
+                        sipri_unit = "% GDP"
+
                     hover_info = (
                         f"Country: {country}<br>"
                         f"Question: {question[:50] + '...' if len(question) > 50 else question}<br>"
@@ -979,8 +1024,10 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
 
                     # Add the actual values used for correlation
                     value_text = ""
-                    for year, ess_val, trade_val in sorted(year_values):
-                        value_text += f"{year}: ESS={ess_val:.2f}, Trade={trade_val:,.0f}<br>"
+                    for year, ess_val, sipri_val in sorted(year_values):
+                        # Apply specific formatting here
+                        formatted_sipri_val = sipri_val_format.format(sipri_val)
+                        value_text += f"{year}: ESS={ess_val:.2f}, SIPRI={formatted_sipri_val}<br>" # Updated variable name and formatting
 
                     hover_row.append(hover_info + value_text)
                 else:
@@ -990,7 +1037,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
         # Create the heatmap with switched axes and custom hover text
         # Adjust heatmap settings based on correlation method
         if correlation_method == 'dcor':
-            heatmap_colorscale = 'Viridis' # Sequential scale for [0, 1]
+            heatmap_colorscale = 'Blues' # Sequential scale for [0, 1]
             heatmap_zmid = None
             heatmap_zmin = 0
             heatmap_zmax = 1
@@ -1030,7 +1077,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
         ))
 
         fig.update_layout(
-            title=f"Country-Level {corr_method_text} Analysis: Arms {trade_action} vs {display_name} {answer_type_text}", # Update main title
+            title=f"Country-Level {corr_method_text} Analysis: {sipri_data_source_text} vs {display_name} {answer_type_text}", # Update main title
             xaxis_title="Countries",
             yaxis_title="ESS Questions",
             height=800,
@@ -1065,10 +1112,10 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
             ]
 
         info_content = html.Div([
-            html.H4(f"Country-Level {corr_method_text} Analysis: {display_name} ({answer_type_text}) vs. Arms {trade_action}"),
-            html.P(f"This heatmap shows the {correlation_method}-based measure between the quantity of arms "
-                   f"{trade_action.lower()} and {answer_type_text.lower()} to ESS questions for each country over time."),
-            html.P("Gap years with no arms trade are treated as having zero value, rather than missing data."),
+            html.H4(f"Country-Level {corr_method_text} Analysis: {display_name} ({answer_type_text}) vs. {sipri_data_source_text}"),
+            html.P(f"This heatmap shows the {correlation_method}-based measure between {sipri_data_source_text.lower()} "
+                   f"and {answer_type_text.lower()} to ESS questions for each country over time."),
+            html.P("Gap years with no arms trade or expenditure data are treated as having zero value, rather than missing data."),
             html.P(interp_text),
             html.P("Interpretation:"),
             html.Ul(interp_points),
@@ -1089,9 +1136,9 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
                 country_time_series = []
                 for round_num in range(1, 12):
                     year = map_round_to_year(round_num)
-                    if year is None or clicked_country not in trade_data or year not in trade_data[clicked_country]:
+                    if year is None or clicked_country not in sipri_data or year not in sipri_data[clicked_country]:
                         continue
-                    trade_quantity = trade_data[clicked_country][year]
+                    sipri_value = sipri_data[clicked_country][year]
 
                     # Map the full country name to code
                     cc = name_to_code.get(clicked_country)
@@ -1108,7 +1155,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
 
                     country_time_series.append({
                         'Year': year,
-                        'Trade_Quantity': trade_quantity,
+                        'SIPRI_Value': sipri_value,
                         'Question_Value': val
                     })
 
@@ -1119,7 +1166,7 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
 
                     # Prepare data for regression
                     X = df_detail['Question_Value'].values.reshape(-1, 1)
-                    y = df_detail['Trade_Quantity'].values
+                    y = df_detail['SIPRI_Value'].values
 
                     # Fit a simple linear regression
                     from sklearn.linear_model import LinearRegression
@@ -1132,11 +1179,11 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
                     # Create a scatter plot
                     detail_fig = go.Figure()
 
-                    # Scatter points: question value on x, trade quantity on y
+                    # Scatter points: question value on x, SIPRI value on y
                     detail_fig.add_trace(
                         go.Scatter(
                             x=df_detail['Question_Value'],
-                            y=df_detail['Trade_Quantity'],
+                            y=df_detail['SIPRI_Value'],
                             mode='markers',
                             name='Data Points'
                         )
@@ -1154,10 +1201,10 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
 
                     # Update layout
                     detail_fig.update_layout(
-                        title=f"{clicked_country}: {clicked_question} vs. Trade Quantity",
+                        title=f"{clicked_country}: {clicked_question} vs. {sipri_data_source_text}",
                         template='plotly_white',
                         xaxis_title=clicked_question,
-                        yaxis_title='Trade Quantity'
+                        yaxis_title=y_axis_label
                     )
 
         return fig, info_content, detail_fig
@@ -1537,13 +1584,6 @@ gdp_expenditure_layout = dbc.Container([
                             ),
                         ], xs=12),
                     ]),
-                    # Help text
-                    dbc.Row([
-                        dbc.Col([
-                            html.P("Tip: Use the range slider below the graph to zoom into specific time periods. Click on country names in the legend to hide or show specific countries.",
-                                  className="text-muted font-italic small")
-                        ])
-                    ])
                 ])
             ], className="mb-4 shadow-sm"),
         ], xs=12)
