@@ -25,10 +25,13 @@ python src/unified_dashboard.py
 Note: You may need to install [git-lfs](https://github.com/git-lfs/git-lfs).
 
 ## Figures
-These are some screenshots of the Plotly figures produced in the Dashboard. To get the full interactive experience, we encourage you to use the Dashboard!
+These are some screenshots of the Plotly figures produced by the Dashboard. To get the full interactive experience, we encourage you to use the Dashboard!
 
-### Correlation Matrix Example
-![Correlation Matrix](/assets/corr-matrix.png)
+### Correlation Matrix Example 1
+![Correlation Matrix Example 1](/assets/corr-matrix-eg.png)
+
+### Correlation Matrix Example 2
+![Correlation Matrix Example 2](/assets/corr-matrix.png)
 
 ### Global Arms Exports Example
 ![Global Arms Exports](/assets/arms-exports.png)

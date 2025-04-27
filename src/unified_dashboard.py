@@ -1083,7 +1083,8 @@ def update_correlation_matrix(selected_dataset, trade_type, answer_type, correla
             height=800,
             margin=dict(l=300, r=50, t=80, b=80),
             template='plotly_white',
-            xaxis=dict(tickangle=-45)
+            xaxis=dict(tickangle=-45, tickfont=dict(size=16)),  # Increased font size for x-axis labels
+            yaxis=dict(tickfont=dict(size=14))  # Increased font size for y-axis labels
         )
 
         # Update info text based on method
